@@ -2,20 +2,24 @@
  * PS/2 mouse to RM Nimbus PC-186 adaptor
  * Inspired by https://www.thenimbus.co.uk/upgrades-and-maintenance/ps2mouse
  * but recreated to use a smaller AVR and release the code openly.
+ * Written for an ATtiny2313, suggested fuses: E:FF H:9F L:E4
  * @author David Knoll <david@davidknoll.me.uk>
  */
 #include <avr/wdt.h>
 
 // Pin definitions
-#define PS2CLK 4
-#define PS2DAT 5
-#define NIMLB 9
-#define NIMRB 10
-#define NIMLT 11
-#define NIMRT 7
-#define NIMUP 12
-#define NIMDN 13
-#define NIMSL 8
+#define PS2BCLK 2
+#define PS2BDAT 3
+#define PS2CLK  4
+#define PS2DAT  5
+#define LED     6
+#define NIMRT   7
+#define NIMSL   8
+#define NIMLB   9
+#define NIMRB  10
+#define NIMLT  11
+#define NIMUP  12
+#define NIMDN  13
 
 // Global variables
 volatile int qx = 0, qy = 0;
@@ -31,26 +35,32 @@ void setup(void)
   digitalWrite(PS2DAT, HIGH);
 
   // Nimbus mouse (or joystick), these have pullups
+  pinMode(NIMRT, INPUT);
   pinMode(NIMLB, INPUT);
   pinMode(NIMRB, INPUT);
   pinMode(NIMLT, INPUT);
-  pinMode(NIMRT, INPUT);
   pinMode(NIMUP, INPUT);
   pinMode(NIMDN, INPUT);
+  digitalWrite(NIMRT, LOW);
   digitalWrite(NIMLB, LOW);
   digitalWrite(NIMRB, LOW);
   digitalWrite(NIMLT, LOW);
-  digitalWrite(NIMRT, LOW);
   digitalWrite(NIMUP, LOW);
   digitalWrite(NIMDN, LOW);
 
-  // Only used by joystick splitter, connected anyway
+  // Not normally used, connected anyway
+  pinMode(PS2BCLK, INPUT);
+  pinMode(PS2BDAT, INPUT);
+  digitalWrite(PS2BCLK, HIGH);
+  digitalWrite(PS2BDAT, HIGH);
   pinMode(NIMSL, INPUT);
   digitalWrite(NIMSL, LOW);
 
   t1setup();   // Timer 1 used for quadrature generation
   delay(3000); // Allow mouse to init
   wdt_enable(WDTO_500MS);
+  pinMode(LED, OUTPUT);
+  digitalWrite(LED, HIGH);
 }
 
 void loop(void)
@@ -65,6 +75,7 @@ void loop(void)
   status = ps2receive();
   px = ps2receive();
   py = ps2receive();
+  digitalWrite(LED, (status & (1 << 2)) ? HIGH : LOW);
 
   // Act on that packet
   pinMode(NIMLB, (status & (1 << 0)) ? OUTPUT : INPUT);

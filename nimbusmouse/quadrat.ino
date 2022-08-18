@@ -9,7 +9,7 @@ void t1setup(void)
   TCCR1A = 0x00;                   // CTC mode
   TCCR1B = _BV(WGM12) | _BV(CS11); // Use OCR1A, prescaler /8 (1MHz)
   TCCR1C = 0x00;
-  OCR1A  = 500;                    // Interrupt at ~2KHz
+  OCR1A  = 2000;                   // Interrupt at ~1/2KHz
   TIMSK |= _BV(OCIE1A);
 }
 
@@ -58,7 +58,7 @@ ISR(TIMER1_COMPA_vect)
   static uint8_t xwc = 0, xph = 0, ywc = 0, yph = 0;
   int xwl = 256 - abs(qx), ywl = 256 - abs(qy);
   if (!xwl) { xwl = 255; }
-  if (!ywl) { ywl = 255; } 
+  if (!ywl) { ywl = 255; }
 
   if (!xwc) {
     switch (xph) {
