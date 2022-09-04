@@ -1,0 +1,50 @@
+; Test output via the PIO to LEDs on what will become AD0-7
+
+.program leds
+
+.wrap_target
+  out x, 3 ; bits 543
+  in x, 3
+  in x, 3 ; skip hidden gpios
+  out x, 3 ; bits 210
+  in x, 3
+  in x, 4 ; skip microsd gpios
+  out x, 2 ; bits 67
+  in x, 2
+  mov pins, isr
+.wrap
+
+% c-sdk {
+
+void leds_program_init(PIO pio, uint sm, uint offset) {
+  // Claim only the pins we're using for AD0-7, not those in between
+  pio_gpio_init(pio, 14);
+  pio_gpio_init(pio, 15);
+  pio_gpio_init(pio, 20);
+  pio_gpio_init(pio, 21);
+  pio_gpio_init(pio, 22);
+  pio_gpio_init(pio, 26);
+  pio_gpio_init(pio, 27);
+  pio_gpio_init(pio, 28);
+
+  pio_sm_config c = leds_program_get_default_config(offset);
+  sm_config_set_in_shift(&c, false, false, 0);
+  sm_config_set_out_shift(&c, true, true, 8);
+  sm_config_set_out_pins(&c, 14, 15);
+
+  pio_sm_init(pio, sm, offset, &c);
+  pio_sm_set_consecutive_pindirs(pio, sm, 14, 15, true);
+  pio_sm_set_enabled(pio, sm, true);
+}
+
+// ARM needs to rearrange 76543210 into 67210543 before sending to the PIO, due to board layout
+void leds_program_outb(PIO pio, uint sm, uint8_t data) {
+  pio_sm_put_blocking(pio, sm,
+    ((data >> 1) & 0x40) |
+    ((data << 1) & 0x80) |
+    ((data >> 3) & 0x07) |
+    ((data << 3) & 0x38)
+  );
+}
+
+%}

@@ -1,0 +1,5 @@
+gerbers
+*-gerbers.zip
+*/build
+*/arduino_secrets.h
+*/*.pio.h
