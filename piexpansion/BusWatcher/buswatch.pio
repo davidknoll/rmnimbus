@@ -1,0 +1,147 @@
+.program buswatch
+
+; Pin mappings
+.define nINT2 0
+.define nINT1 1
+.define nINT0 2
+.define nDMA 3
+.define nCS3 4
+.define nCS2 5
+.define nCS1 6
+.define nCS0 7
+.define nRESET 8
+.define nWAIT 9
+.define IORQ 10
+.define WR 11
+.define RD 12
+.define nALE 13
+.define AD7 14
+.define AD6 15
+.define AD0 20
+.define AD1 21
+.define AD2 22
+.define AD3 26
+.define AD4 27
+.define AD5 28
+
+.wrap_target
+  wait 0 gpio nCS3
+  wait 1 gpio nALE
+  in pins, 15 ; get the address
+  wait 1 gpio IORQ ; covers both RD and WR
+  set x, 1
+  jmp pin isread ; the pin in question being RD
+  set x, 0
+isread:
+  in x, 1 ; get the read flag
+  wait 0 gpio IORQ
+  in pins, 15 ; get the data
+  in null, 1 ; and that's 32 bits
+  wait 1 gpio nCS3
+  push noblock
+.wrap
+
+% c-sdk {
+
+// Pin mappings
+#define nINT2 0
+#define nINT1 1
+#define nINT0 2
+#define nDMA 3
+#define nCS3 4
+#define nCS2 5
+#define nCS1 6
+#define nCS0 7
+#define nRESET 8
+#define nWAIT 9
+#define IORQ 10
+#define WR 11
+#define RD 12
+#define nALE 13
+#define AD7 14
+#define AD6 15
+#define AD0 20
+#define AD1 21
+#define AD2 22
+#define AD3 26
+#define AD4 27
+#define AD5 28
+
+struct busreq {
+  bool isread;
+  uint cs;
+  uint address;
+  uint data;
+};
+
+void buswatch_program_init(PIO pio, uint sm, uint offset) {
+  pio_gpio_init(pio, nINT2);
+  pio_gpio_init(pio, nINT1);
+  pio_gpio_init(pio, nINT0);
+  pio_gpio_init(pio, nDMA);
+  pio_gpio_init(pio, nCS3);
+  pio_gpio_init(pio, nCS2);
+  pio_gpio_init(pio, nCS1);
+  pio_gpio_init(pio, nCS0);
+  pio_gpio_init(pio, nRESET);
+  pio_gpio_init(pio, nWAIT);
+  pio_gpio_init(pio, IORQ);
+  pio_gpio_init(pio, WR);
+  pio_gpio_init(pio, RD);
+  pio_gpio_init(pio, nALE);
+  pio_gpio_init(pio, AD7);
+  pio_gpio_init(pio, AD6);
+  pio_gpio_init(pio, AD0);
+  pio_gpio_init(pio, AD1);
+  pio_gpio_init(pio, AD2);
+  pio_gpio_init(pio, AD3);
+  pio_gpio_init(pio, AD4);
+  pio_gpio_init(pio, AD5);
+
+  pio_sm_config c = buswatch_program_get_default_config(offset);
+  sm_config_set_in_shift(&c, false, false, 0);
+  sm_config_set_in_pins(&c, 14);
+  sm_config_set_jmp_pin(&c, RD);
+
+  pio_sm_init(pio, sm, offset, &c);
+  pio_sm_set_consecutive_pindirs(pio, sm, 0, 29, false);
+  pio_sm_set_enabled(pio, sm, true);
+}
+
+/*
+FIFO bit:  31  30  29  28| 27  26  25  24| 23  22  21  20| 19  18  17  16| 15  14  13  12| 11  10   9   8|  7   6   5   4|  3   2   1   0
+Contents:  A5  A4  A3   x   x   x  A2  A1  A0   x   x   x   x  A6  A7  RD  D5  D4  D3   x   x   x  D2  D1  D0   x   x   x   x  D6  D7   x
+*/
+
+struct busreq *buswatch_program_get(PIO pio, uint sm, struct busreq *result) {
+  if (result == nullptr) { return nullptr; }
+  uint32_t data = pio_sm_get(pio, sm);
+  if (pio->fdebug & (1 << (PIO_FDEBUG_RXUNDER_LSB + sm))) {
+    pio->fdebug = 1 << (PIO_FDEBUG_RXUNDER_LSB + sm);
+    return nullptr;
+  }
+
+  result->isread = data & (1 << 16);
+  result->cs = 3;
+  result->address =
+    (data & (1 << 17) ? 0x80 : 0x00) |
+    (data & (1 << 18) ? 0x40 : 0x00) |
+    (data & (1 << 31) ? 0x20 : 0x00) |
+    (data & (1 << 30) ? 0x10 : 0x00) |
+    (data & (1 << 29) ? 0x08 : 0x00) |
+    (data & (1 << 25) ? 0x04 : 0x00) |
+    (data & (1 << 24) ? 0x02 : 0x00) |
+    (data & (1 << 23) ? 0x01 : 0x00);
+  result->data =
+    (data & (1 <<  1) ? 0x80 : 0x00) |
+    (data & (1 <<  2) ? 0x40 : 0x00) |
+    (data & (1 << 15) ? 0x20 : 0x00) |
+    (data & (1 << 14) ? 0x10 : 0x00) |
+    (data & (1 << 13) ? 0x08 : 0x00) |
+    (data & (1 <<  9) ? 0x04 : 0x00) |
+    (data & (1 <<  8) ? 0x02 : 0x00) |
+    (data & (1 <<  7) ? 0x01 : 0x00);
+  return result;
+}
+
+%}
