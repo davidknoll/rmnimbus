@@ -9,6 +9,7 @@
 #include <WiFi.h>
 #include <hardware/pio.h>
 #include <hardware/rtc.h>
+#include <hardware/watchdog.h>
 #include <sys/time.h>
 #include <time.h>
 
@@ -19,36 +20,38 @@
 #include <Adafruit_TinyUSB.h>
 #endif
 
-#include "pico/cyw43_arch.h"
-#include "boards/pico_w.h"
-#define ledon() cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1)
-#define ledoff() cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0)
-#define led(a) cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, (a))
-
 #define rol(b) ((((b) >> 7) & 1) | ((b) << 1))
 #define ror(b) ((((b) << 7) & 0x80) | ((b) >> 1))
 #define bintobcd(b) ((((b) / 10) << 4) | ((b) % 10))
 #define bcdtobin(b) ((((b) >> 4) * 10) + ((b) & 0x0F))
 
+#define TIMEZONE "Europe/London"
 #define SD_CS_PIN 17
 #define DEVICE_PIO pio0
 #define DEVICE_SM 0
 
-#define DEVICE_CS 3
-#define DEVICE_READ dsrtc_read
-#define DEVICE_WRITE dsrtc_write
+#define DEVICE_CS 1
+#define DEVICE_READ parallel_read
+#define DEVICE_WRITE parallel_write
+
+#define PARALLEL_DEBUG 1
+#define PARALLEL_IRQ_PIN nINT2
+#define PARALLEL_TCP_PORTA 1100
+#define PARALLEL_TCP_PORTB 1101
+#define PARALLEL_TXACK_US 100
 
 void setup() {
   Serial.begin(115200);
   Serial.println("Booting I/O Device Emulator for RM Nimbus PC-186");
 
+  alarm_pool_init_default();
   init_wifi();
   init_time();
   init_rtc();
   init_ota();
   init_sd();
   init_pio();
-  alarm_pool_init_default();
+  parallel_setup();
 
   Serial.println("Ready");
 }
@@ -56,6 +59,12 @@ void setup() {
 void loop() {
   struct busreq req;
   ArduinoOTA.handle();
+  parallel_loop();
+
+  if (!digitalRead(nRESET)) {
+    watchdog_enable(1, 1);
+    while (1);
+  }
 
   // Check and respond to a pending request from the Nimbus
   if (device_program_get(DEVICE_PIO, DEVICE_SM, &req) != nullptr) {

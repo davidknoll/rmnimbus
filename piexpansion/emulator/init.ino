@@ -2,8 +2,17 @@
  * Connect to a WiFi network using details from the secrets file
  */
 void init_wifi() {
+  uint8_t mac[WL_MAC_ADDR_LENGTH];
+  char hostname[20];
+  WiFi.macAddress(mac);
+  sprintf(hostname, "nimbus-%02x%02x%02x", mac[3], mac[4], mac[5]);
+  WiFi.setHostname(hostname);
+
   WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASS);
   WiFi.waitForConnectResult();
+
+  Serial.print("Hostname: ");
+  Serial.println(WiFi.getHostname());
   Serial.print("Local IP address: ");
   Serial.println(WiFi.localIP());
 }
@@ -13,7 +22,7 @@ void init_wifi() {
  */
 void init_time() {
   HTTPClient http;
-  if (http.begin("http://worldtimeapi.org/api/timezone/" SECRET_TIMEZONE)) {
+  if (http.begin("http://worldtimeapi.org/api/timezone/" TIMEZONE)) {
     if (http.GET() > 0) {
       JSONVar timedata = JSON.parse(http.getString());
       struct timeval tv = {
@@ -57,11 +66,7 @@ void init_rtc() {
  * Allow firmware updates over WiFi
  */
 void init_ota() {
-  uint8_t mac[WL_MAC_ADDR_LENGTH];
-  char hostname[20];
-  WiFi.macAddress(mac);
-  sprintf(hostname, "nimbus-%02x%02x%02x", mac[3], mac[4], mac[5]);
-  ArduinoOTA.setHostname(hostname);
+  ArduinoOTA.setHostname(WiFi.getHostname());
   ArduinoOTA.setPassword(SECRET_OTA_PASS);
   ArduinoOTA.begin();
 }
