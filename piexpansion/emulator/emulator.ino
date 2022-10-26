@@ -30,15 +30,18 @@
 #define DEVICE_PIO pio0
 #define DEVICE_SM 0
 
-#define DEVICE_CS 1
-#define DEVICE_READ parallel_read
-#define DEVICE_WRITE parallel_write
+#define DEVICE_CS 2
+#define DEVICE_READ dcc_read
+#define DEVICE_WRITE dcc_write
 
 #define PARALLEL_DEBUG 1
 #define PARALLEL_IRQ_PIN nINT2
 #define PARALLEL_TCP_PORTA 1100
 #define PARALLEL_TCP_PORTB 1101
 #define PARALLEL_TXACK_US 100
+
+#define DCC_DEBUG 0
+#define DCC_IRQ_PIN nINT2
 
 void setup() {
   Serial.begin(115200);
@@ -51,7 +54,8 @@ void setup() {
   init_ota();
   init_sd();
   init_pio();
-  parallel_setup();
+  // parallel_setup();
+  dcc_setup();
 
   Serial.println("Ready");
 }
@@ -59,7 +63,8 @@ void setup() {
 void loop() {
   struct busreq req;
   ArduinoOTA.handle();
-  parallel_loop();
+  // parallel_loop();
+  dcc_loop();
 
   if (!digitalRead(nRESET)) {
     watchdog_enable(1, 1);
