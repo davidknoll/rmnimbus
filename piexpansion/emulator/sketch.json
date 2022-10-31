@@ -2,6 +2,6 @@
   "cpu": {
     "fqbn": "rp2040:rp2040:rpipicow",
     "name": "Raspberry Pi Pico W",
-    "port": "serial:///dev/cu.usbmodem213101"
+    "port": "serial:///dev/cu.usbmodem13101"
   }
 }

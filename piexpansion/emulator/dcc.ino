@@ -74,6 +74,7 @@ void dcc_loop() {
         dcc_setip(0x20);
         break;
     }
+    if ((dcc_wr1a & 0xE0) == 0xE0) { digitalWrite(nDMA, LOW); } // Rx DMA?
   }
 }
 
@@ -81,11 +82,14 @@ void dcc_loop() {
  * Read from an emulated Data Communications Controller card
  */
 uint dcc_read(uint address) {
-  uint data = 0x00;
+  uint reg = 0, data = 0x00;
 
   switch (address & 0xE) {
     case 0x0: // Channel B control
-      switch ((dcc_wr0b & 0x30) ? (dcc_wr0b & 0x7) : (dcc_wr0b & 0xF)) {
+      reg = (dcc_wr0b & 0x30) ? (dcc_wr0b & 0x7) : (dcc_wr0b & 0xF);
+      dcc_wr0b = 0x00;
+
+      switch (reg) {
         case 2: // RR2
         case 6: // RR6
           data = dcc_wr2;
@@ -105,11 +109,13 @@ uint dcc_read(uint address) {
           }
           break;
       }
-      dcc_wr0b = 0x00;
       break;
 
     case 0x2: // Channel A control
-      switch ((dcc_wr0a & 0x30) ? (dcc_wr0a & 0x7) : (dcc_wr0a & 0xF)) {
+      reg = (dcc_wr0a & 0x30) ? (dcc_wr0a & 0x7) : (dcc_wr0a & 0xF);
+      dcc_wr0a = 0x00;
+
+      switch (reg) {
         case 0: // RR0
         case 4: // RR4
           data = 0x2C;                          // CTS, DCD, Tx empty always set
@@ -132,11 +138,7 @@ uint dcc_read(uint address) {
           break;
 
         case 8: // RR8
-          if (dcc_rr8a != -1) {
-            data = dcc_rr8a;
-            dcc_rr8a = -1;
-            dcc_clrip(0x20);
-          }
+          data = dcc_rx();
           break;
 
         case 9: // RR9
@@ -158,18 +160,13 @@ uint dcc_read(uint address) {
           data = dcc_wr12a;
           break;
       }
-      dcc_wr0a = 0x00;
       break;
 
     case 0x4: // Channel B data
       break;
 
     case 0x6: // Channel A data
-      if (dcc_rr8a != -1) {
-        data = dcc_rr8a;
-        dcc_rr8a = -1;
-        dcc_clrip(0x20);
-      }
+      data = dcc_rx();
       break;
 
     default:  // Aux register
@@ -181,7 +178,18 @@ uint dcc_read(uint address) {
 #if DCC_DEBUG
   Serial.print("DCC READ  ");
   Serial.print(address, HEX);
-  Serial.print(" ");
+  Serial.print(" (");
+  if (address < 0x8) {
+    Serial.print((address & 0x4) ? "D" : "C");
+    Serial.print((address & 0x2) ? "A" : "B");
+    if (address < 0x4) {
+      Serial.print(" RR");
+      Serial.print(reg);
+    }
+  } else {
+    Serial.print("AUX");
+  }
+  Serial.print(") = ");
   Serial.println(data, HEX);
 #endif
 
@@ -192,7 +200,7 @@ uint dcc_read(uint address) {
  * Write to an emulated Data Communications Controller card
  */
 void dcc_write(uint address, uint data) {
-  uint8_t reg;
+  uint reg = 0;
 
   switch (address & 0xE) {
     case 0x0: // Channel B control
@@ -261,7 +269,7 @@ void dcc_write(uint address, uint data) {
 
         case 9: // WR9
           dcc_wr9 = data;
-          if (data & 0x80) {         // Channel reset A (or force hardware reset)
+          if (data & 0x80) {           // Channel reset A (or force hardware reset)
             dcc_wr0a = 0x00;
             dcc_wr1a = 0x00;
             dcc_wr3a = 0x00;
@@ -272,12 +280,13 @@ void dcc_write(uint address, uint data) {
             dcc_wr15a = 0xF8;
             dcc_rr8a = -1;
             dcc_clrip(0xF8);
+            digitalWrite(nDMA, HIGH);
           }
-          if (data & 0x40) {         // Channel reset B (or force hardware reset)
+          if (data & 0x40) {           // Channel reset B (or force hardware reset)
             dcc_wr0b = 0x00;
             dcc_clrip(0xC7);
           }
-          if (data & 0xC0 == 0xC0) { // Force hardware reset
+          if ((data & 0xC0) == 0xC0) { // Force hardware reset
             dcc_wr2 = 0x00;
           }
           break;
@@ -314,7 +323,18 @@ void dcc_write(uint address, uint data) {
 #if DCC_DEBUG
   Serial.print("DCC WRITE ");
   Serial.print(address, HEX);
-  Serial.print(" ");
+  Serial.print(" (");
+  if (address < 0x8) {
+    Serial.print((address & 0x4) ? "D" : "C");
+    Serial.print((address & 0x2) ? "A" : "B");
+    if (address < 0x4) {
+      Serial.print(" WR");
+      Serial.print(reg);
+    }
+  } else {
+    Serial.print("AUX");
+  }
+  Serial.print(") = ");
   Serial.println(data, HEX);
 #endif
 }
@@ -323,6 +343,9 @@ void dcc_write(uint address, uint data) {
  * Send a byte, accounting for the current settings
  */
 static void dcc_tx(uint8_t data) {
+  dcc_clrip(0x10);
+  if ((dcc_wr1a & 0xE0) == 0xC0) { digitalWrite(nDMA, HIGH); }
+
   switch (dcc_wr5a & 0x60) {       // Tx bits/char
     case 0x00:                     // 5 or less bits
       if (!(data & 0x80)) {        // 5 bits
@@ -350,6 +373,21 @@ static void dcc_tx(uint8_t data) {
   if (dcc_wr5a & 0x08) { Serial.write(data); } // Tx enabled?
   if (dcc_wr14a & 0x10) { dcc_rr8a = data; }   // Local loopback?
   if (dcc_wr1a & 0x02) { dcc_setip(0x10); }    // Tx interrupt?
+  if ((dcc_wr1a & 0xE0) == 0xC0) { digitalWrite(nDMA, LOW); } // Tx DMA?
+}
+
+/**
+ * Read a byte, if there is one
+ */
+static uint8_t dcc_rx() {
+  uint8_t data = 0x00;
+  if (dcc_rr8a != -1) {
+    data = dcc_rr8a;
+    dcc_rr8a = -1;
+    dcc_clrip(0x20);
+    if ((dcc_wr1a & 0xE0) == 0xE0) { digitalWrite(nDMA, HIGH); }
+  }
+  return data;
 }
 
 /**
@@ -361,7 +399,8 @@ static void dcc_setip(uint8_t mask) {
   if (((dcc_wr9 & 0x08) && dcc_rr3) || (!(dcc_wr9 & 0x04) && dcc_auxip)) {
     digitalWrite(DCC_IRQ_PIN, LOW);
 #if DCC_DEBUG
-    Serial.println("DCC IRQ SET");
+    Serial.print("DCC IRQ SET ");
+    Serial.println(mask, HEX);
 #endif
   }
 }
@@ -375,7 +414,8 @@ static void dcc_clrip(uint8_t mask) {
   if (!((dcc_wr9 & 0x08) && dcc_rr3) && !(!(dcc_wr9 & 0x04) && dcc_auxip)) {
     digitalWrite(DCC_IRQ_PIN, HIGH);
 #if DCC_DEBUG
-    Serial.println("DCC IRQ CLEAR");
+    Serial.print("DCC IRQ CLR ");
+    Serial.println(mask, HEX);
 #endif
   }
 }
