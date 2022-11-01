@@ -119,14 +119,10 @@ void device_program_init(PIO pio, uint sm, uint offset, uint cs) {
   sm_config_set_in_shift(&c, false, false, 0); // left shift, no auto-push
   sm_config_set_out_shift(&c, true, false, 0); // right shift, no auto-pull
 
-  // An additional state machine on the same PIO is claimed
-  // so the ARM can use it to directly control some of the same pins
   pio_sm_claim(pio, sm);
-  pio_sm_claim(pio, sm + 1);
   pio_sm_init(pio, sm, offset, &c);
-  pio_sm_init(pio, sm + 1, offset, &c);
-  pio_sm_set_pindirs_with_mask(pio, sm + 1, 1 << nWAIT, ~0);
-  pio_sm_set_pins_with_mask(pio, sm + 1, 1 << nWAIT, 1 << nWAIT);
+  pio_sm_set_pindirs_with_mask(pio, sm, 1 << nWAIT, ~0);
+  pio_sm_set_pins_with_mask(pio, sm, 1 << nWAIT, 1 << nWAIT);
   switch (sm) {
     case 0: pio_set_irq0_source_enabled(pio, pis_interrupt0, true); break;
     case 1: pio_set_irq0_source_enabled(pio, pis_interrupt1, true); break;
@@ -148,7 +144,7 @@ struct busreq *device_program_get(PIO pio, uint sm, struct busreq *req) {
     return nullptr;
   }
   if (addr & (1 << 6)) { // AD0
-    pio_sm_set_pins_with_mask(pio, sm + 1, 1 << nWAIT, 1 << nWAIT);
+    pio_sm_set_pins_with_mask(pio, sm, 1 << nWAIT, 1 << nWAIT);
     return nullptr;
   }
 
@@ -180,7 +176,7 @@ struct busreq *device_program_get(PIO pio, uint sm, struct busreq *req) {
       (digitalRead(AD2) ? 0x04 : 0x00) |
       (digitalRead(AD1) ? 0x02 : 0x00) |
       (digitalRead(AD0) ? 0x01 : 0x00);
-    pio_sm_set_pins_with_mask(pio, sm + 1, 1 << nWAIT, 1 << nWAIT);
+    pio_sm_set_pins_with_mask(pio, sm, 1 << nWAIT, 1 << nWAIT);
   }
 
   return req;
@@ -192,8 +188,8 @@ struct busreq *device_program_respond(PIO pio, uint sm, struct busreq *req) {
     (1 << AD7) | (1 << AD6) | (1 << AD5) | (1 << AD4) |
     (1 << AD3) | (1 << AD2) | (1 << AD1) | (1 << AD0);
 
-  pio_sm_set_pindirs_with_mask(pio, sm + 1, dirmask, dirmask);
-  pio_sm_set_pins_with_mask(pio, sm + 1,
+  pio_sm_set_pindirs_with_mask(pio, sm, dirmask, dirmask);
+  pio_sm_set_pins_with_mask(pio, sm,
     ((req->data & 0x80) ? (1 << AD7) : 0x00) |
     ((req->data & 0x40) ? (1 << AD6) : 0x00) |
     ((req->data & 0x20) ? (1 << AD5) : 0x00) |
@@ -205,7 +201,7 @@ struct busreq *device_program_respond(PIO pio, uint sm, struct busreq *req) {
     dirmask
   );
 
-  pio_sm_set_pins_with_mask(pio, sm + 1, 1 << nWAIT, 1 << nWAIT);
+  pio_sm_set_pins_with_mask(pio, sm, 1 << nWAIT, 1 << nWAIT);
   return req;
 }
 

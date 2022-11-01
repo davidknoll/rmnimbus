@@ -91,5 +91,8 @@ void init_sd() {
  */
 void init_pio() {
   uint offset = pio_add_program(DEVICE_PIO, &device_program);
-  device_program_init(DEVICE_PIO, DEVICE_SM, offset, DEVICE_CS);
+  // device_program_init(DEVICE_PIO, 0, offset, 0);
+  device_program_init(DEVICE_PIO, 1, offset, 1);
+  device_program_init(DEVICE_PIO, 2, offset, 2);
+  device_program_init(DEVICE_PIO, 3, offset, 3);
 }

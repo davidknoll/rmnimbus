@@ -397,7 +397,7 @@ static void dcc_setip(uint8_t mask) {
   dcc_rr3 |= mask;
 
   if (((dcc_wr9 & 0x08) && dcc_rr3) || (!(dcc_wr9 & 0x04) && dcc_auxip)) {
-    digitalWrite(DCC_IRQ_PIN, LOW);
+    dcc_irq_flag = true;
 #if DCC_DEBUG
     Serial.print("DCC IRQ SET ");
     Serial.println(mask, HEX);
@@ -412,7 +412,7 @@ static void dcc_clrip(uint8_t mask) {
   dcc_rr3 &= ~mask;
 
   if (!((dcc_wr9 & 0x08) && dcc_rr3) && !(!(dcc_wr9 & 0x04) && dcc_auxip)) {
-    digitalWrite(DCC_IRQ_PIN, HIGH);
+    dcc_irq_flag = false;
 #if DCC_DEBUG
     Serial.print("DCC IRQ CLR ");
     Serial.println(mask, HEX);

@@ -28,20 +28,16 @@
 #define TIMEZONE "Europe/London"
 #define SD_CS_PIN 17
 #define DEVICE_PIO pio0
-#define DEVICE_SM 0
 
-#define DEVICE_CS 2
-#define DEVICE_READ dcc_read
-#define DEVICE_WRITE dcc_write
-
-#define PARALLEL_DEBUG 1
-#define PARALLEL_IRQ_PIN nINT2
+#define PARALLEL_DEBUG 0
 #define PARALLEL_TCP_PORTA 1100
 #define PARALLEL_TCP_PORTB 1101
 #define PARALLEL_TXACK_US 100
 
 #define DCC_DEBUG 0
-#define DCC_IRQ_PIN nINT2
+
+volatile bool parallel_irq_flag = false;
+volatile bool dcc_irq_flag      = false;
 
 void setup() {
   Serial.begin(115200);
@@ -54,7 +50,7 @@ void setup() {
   init_ota();
   init_sd();
   init_pio();
-  // parallel_setup();
+  parallel_setup();
   dcc_setup();
 
   Serial.println("Ready");
@@ -63,7 +59,7 @@ void setup() {
 void loop() {
   struct busreq req;
   ArduinoOTA.handle();
-  // parallel_loop();
+  parallel_loop();
   dcc_loop();
 
   if (!digitalRead(nRESET)) {
@@ -71,13 +67,28 @@ void loop() {
     while (1);
   }
 
+  digitalWrite(nINT2, (parallel_irq_flag || dcc_irq_flag) ? LOW : HIGH);
+
   // Check and respond to a pending request from the Nimbus
-  if (device_program_get(DEVICE_PIO, DEVICE_SM, &req) != nullptr) {
+  if (
+    // (device_program_get(DEVICE_PIO, 0, &req) != nullptr) ||
+    (device_program_get(DEVICE_PIO, 1, &req) != nullptr) ||
+    (device_program_get(DEVICE_PIO, 2, &req) != nullptr) ||
+    (device_program_get(DEVICE_PIO, 3, &req) != nullptr)
+  ) {
     if (req.isread) {
-      req.data = DEVICE_READ(req.address);
-      device_program_respond(DEVICE_PIO, DEVICE_SM, &req);
+      switch (req.cs) {
+        case 1: req.data = parallel_read(req.address); break;
+        case 2: req.data = dcc_read(     req.address); break;
+        case 3: req.data = dsrtc_read(   req.address); break;
+      }
+      device_program_respond(DEVICE_PIO, req.cs, &req);
     } else {
-      DEVICE_WRITE(req.address, req.data);
+      switch (req.cs) {
+        case 1: parallel_write(req.address, req.data); break;
+        case 2: dcc_write(     req.address, req.data); break;
+        case 3: dsrtc_write(   req.address, req.data); break;
+      }
     }
   }
 }

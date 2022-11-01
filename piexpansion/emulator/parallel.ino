@@ -91,7 +91,7 @@ static void parallel_update_irq() {
     }
 #endif
     parallel_ifr |= 0x80;
-    digitalWrite(PARALLEL_IRQ_PIN, LOW);  // Assert /IRQx
+    parallel_irq_flag = true;  // Assert /IRQx
   } else {
 #if PARALLEL_DEBUG
     if (parallel_ifr & 0x80) {
@@ -100,7 +100,7 @@ static void parallel_update_irq() {
     }
 #endif
     parallel_ifr &= ~0x80;
-    digitalWrite(PARALLEL_IRQ_PIN, HIGH); // Deassert /IRQx
+    parallel_irq_flag = false; // Deassert /IRQx
   }
 }
 
