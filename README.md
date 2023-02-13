@@ -5,6 +5,7 @@ Unless otherwise stated, anything here that was made by me can be used/distribut
 
 * ***8087repro*** - Reproduction of the 8087 option board for the PC-186, using a DS1100 delay line IC instead of EP8274. Not yet tested- I am awaiting prototype PCBs.
 * ***idecf*** - Ideas for how to attach a CF card to the PC-386, which uses the MCA bus so the right hardware can be harder to find.
+* ***nimbuscd*** - This contains some experiments with using a SCSI CD-ROM drive (initially, emulated with BlueSCSI) on the PC-186 with original DCB. I'm hoping to make it into `nimbuscd.sys`, a CD-ROM device driver to use with MSCDEX.
 * ***nimbusmouse*** - I saw [this PS/2 mouse adaptor](https://www.thenimbus.co.uk/upgrades-and-maintenance/ps2mouse) and thought it could be done with a smaller microcontroller (specifically, an ATtiny2313 using [ATTinyCore](https://github.com/SpenceKonde/ATTinyCore)).
   * My version isn't working at the moment, but I've had aspects of it working. Work in progress.
 * ***nimbusrtc*** - Attach a DS12C887A RTC pretty much directly to the bus as an expansion card. EAGLE files included, but only a stripboard prototype has been made IRL, which works. Awaiting prototype PCBs.
