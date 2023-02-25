@@ -278,7 +278,7 @@ extern int sasi_request_sense_ascq(unsigned char target, unsigned char lun);
 extern int sasi_read(unsigned char target, unsigned char lun, unsigned long sector, unsigned int count, unsigned char far *buf);
 extern int sasi_write(unsigned char target, unsigned char lun, unsigned long sector, unsigned int count, unsigned char far *buf);
 extern int sasi_read_capacity(unsigned char target, unsigned char lun, unsigned long far *volend, unsigned long far *secsz);
-extern int sasi_inquiry(unsigned char target, unsigned char lun, unsigned char bufsz, unsigned char *buf);
+extern int sasi_inquiry(unsigned char target, unsigned char lun, unsigned char bufsz, unsigned char far *buf);
 
 /* cdriver.c */
 extern void init(void);

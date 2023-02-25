@@ -225,22 +225,28 @@ int sasi_read_capacity(unsigned char target, unsigned char lun, unsigned long fa
 	} else {
 		// success?
 		if (volend) {
-			*volend =	(sasi_scratch[12] << 24) ||
-					(sasi_scratch[13] << 16) ||
-					(sasi_scratch[14] << 8) ||
-					sasi_scratch[15];
+			*volend = sasi_scratch[12];
+			*volend <<= 8;
+			*volend |= sasi_scratch[13];
+			*volend <<= 8;
+			*volend |= sasi_scratch[14];
+			*volend <<= 8;
+			*volend |= sasi_scratch[15];
 		}
 		if (secsz) {
-			*secsz =	(sasi_scratch[16] << 24) ||
-					(sasi_scratch[17] << 16) ||
-					(sasi_scratch[18] << 8) ||
-					sasi_scratch[19];
+			*secsz = sasi_scratch[16];
+			*secsz <<= 8;
+			*secsz |= sasi_scratch[17];
+			*secsz <<= 8;
+			*secsz |= sasi_scratch[18];
+			*secsz <<= 8;
+			*secsz |= sasi_scratch[19];
 		}
 		return bytes - 12;
 	}
 }
 
-int sasi_inquiry(unsigned char target, unsigned char lun, unsigned char bufsz, unsigned char *buf)
+int sasi_inquiry(unsigned char target, unsigned char lun, unsigned char bufsz, unsigned char far *buf)
 {
 	int bytes;
 	if (target > 7 || lun > 7 || (bufsz && !buf)) { return -5; }

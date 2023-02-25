@@ -1,7 +1,7 @@
 CFLAGS=/G1 /AT /Gs /Zp /nologo
 CC=qcl
 
-all: cdtest.exe nimbuscd.sys
+all: cdtest.exe inquiry.exe nimbuscd.sys
 
 clean:
 	del *.obj
@@ -10,7 +10,10 @@ clean:
 	del *.map
 
 cdtest.exe: cdtest.obj driver.obj sasicmd.obj cdriver.obj
-	qlink /nologo cdtest.obj driver.obj sasicmd.obj cdriver.obj, cdtest.exe, cdtest.map,,
+	qlink /nologo cdtest.obj driver.obj sasicmd.obj cdriver.obj, cdtest.exe,,,
+
+inquiry.exe: inquiry.obj sasicmd.obj
+	qlink /nologo inquiry.obj sasicmd.obj, inquiry.exe,,,
 
 nimbuscd.sys: driver.obj sasicmd.obj cdriver.obj
 	qlink /nologo driver.obj sasicmd.obj cdriver.obj, nimbuscd.exe, nimbuscd.map,,
