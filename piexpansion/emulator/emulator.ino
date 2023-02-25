@@ -4,6 +4,7 @@
 
 #include <Arduino_JSON.h>
 #include <ArduinoOTA.h>
+#include <CircularBuffer.h>
 #include <HTTPClient.h>
 #include <SDFS.h>
 #include <WiFi.h>
@@ -50,6 +51,7 @@ void setup() {
   init_ota();
   init_sd();
   init_pio();
+  dcb_setup();
   parallel_setup();
   dcc_setup();
 
@@ -59,6 +61,7 @@ void setup() {
 void loop() {
   struct busreq req;
   ArduinoOTA.handle();
+  dcb_loop();
   parallel_loop();
   dcc_loop();
 
@@ -71,13 +74,14 @@ void loop() {
 
   // Check and respond to a pending request from the Nimbus
   if (
-    // (device_program_get(DEVICE_PIO, 0, &req) != nullptr) ||
+    (device_program_get(DEVICE_PIO, 0, &req) != nullptr) ||
     (device_program_get(DEVICE_PIO, 1, &req) != nullptr) ||
     (device_program_get(DEVICE_PIO, 2, &req) != nullptr) ||
     (device_program_get(DEVICE_PIO, 3, &req) != nullptr)
   ) {
     if (req.isread) {
       switch (req.cs) {
+        case 0: req.data = dcb_read(     req.address); break;
         case 1: req.data = parallel_read(req.address); break;
         case 2: req.data = dcc_read(     req.address); break;
         case 3: req.data = dsrtc_read(   req.address); break;
@@ -85,6 +89,7 @@ void loop() {
       device_program_respond(DEVICE_PIO, req.cs, &req);
     } else {
       switch (req.cs) {
+        case 0: dcb_write(     req.address, req.data); break;
         case 1: parallel_write(req.address, req.data); break;
         case 2: dcc_write(     req.address, req.data); break;
         case 3: dsrtc_write(   req.address, req.data); break;
