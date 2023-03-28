@@ -1,6 +1,7 @@
 static volatile uint8_t dcc_wr0a  = 0x00;
 static volatile uint8_t dcc_wr0b  = 0x00;
 static volatile uint8_t dcc_wr1a  = 0x00;
+static volatile uint8_t dcc_wr1b  = 0x00;
 static volatile uint8_t dcc_wr2   = 0x00;
 static volatile uint8_t dcc_wr3a  = 0x00;
 static volatile uint8_t dcc_wr5a  = 0x00;
@@ -14,6 +15,11 @@ static volatile int16_t dcc_rr8a  = -1;
 static volatile uint8_t dcc_auxwr = 0x00;
 static volatile uint8_t dcc_auxrd = 0x00;
 static volatile bool    dcc_auxip = false;
+
+WiFiServer dcc_server(2345);
+WiFiClient dcc_client;
+CircularBuffer<uint8_t,4096> dcc_txbuf;
+CircularBuffer<uint8_t,4096> dcc_rxbuf;
 
 /*
  * Aux read register bits:
@@ -48,7 +54,7 @@ static volatile bool    dcc_auxip = false;
  * To be called during sketch setup()
  */
 void dcc_setup() {
-  // Nothing here yet
+  dcc_server.begin();
 }
 
 /**
@@ -76,6 +82,30 @@ void dcc_loop() {
     }
     if ((dcc_wr1a & 0xE0) == 0xE0) { digitalWrite(nDMA, LOW); } // Rx DMA?
   }
+
+  if (dcc_client) {
+    if (dcc_client.connected()) {
+      while (dcc_client.available() && !dcc_rxbuf.isFull()) {
+        dcc_rxbuf.push(dcc_client.read());
+        switch (dcc_wr1b & 0x18) { // Rx interrupt mode
+          case 0x08:               // Rx int on 1st char or special
+            dcc_wr1b &= ~0x18;     // Got that 1st char, now clear the mode
+            // Missing break; intentional
+          case 0x10:               // Rx int on all char or special
+            dcc_setip(0x04);
+            break;
+        }
+      }
+      while (!dcc_txbuf.isEmpty()) {
+        dcc_client.write(dcc_txbuf.shift());
+      }
+    } else {
+      dcc_client.stop();
+      dcc_client = dcc_server.available();
+    }
+  } else {
+    dcc_client = dcc_server.available();
+  }
 }
 
 /**
@@ -90,6 +120,12 @@ uint dcc_read(uint address) {
       dcc_wr0b = 0x00;
 
       switch (reg) {
+        case 0: // RR0
+        case 4: // RR4
+          if (!dcc_rxbuf.isEmpty()) { data |= 0x01; }
+          if (!dcc_txbuf.isFull()) { data |= 0x04; }
+          break;
+
         case 2: // RR2
         case 6: // RR6
           data = dcc_wr2;
@@ -163,6 +199,8 @@ uint dcc_read(uint address) {
       break;
 
     case 0x4: // Channel B data
+      data = dcc_rxbuf.shift();
+      dcc_clrip(0x04);
       break;
 
     case 0x6: // Channel A data
@@ -214,10 +252,18 @@ void dcc_write(uint address, uint data) {
             case 0x10: // Reset ES int
               dcc_clrip(0x01);
               break;
+            case 0x20: // Enable next Rx int
+              dcc_wr1b &= ~0x18;
+              dcc_wr1b |= 0x08;
+              break;
             case 0x28: // Reset Tx int
               dcc_clrip(0x02);
               break;
           }
+          break;
+
+        case 1: // WR1
+          dcc_wr1b = data;
           break;
 
         case 2: // WR2
@@ -310,6 +356,7 @@ void dcc_write(uint address, uint data) {
       break;
 
     case 0x4: // Channel B data
+      dcc_txbuf.push(data);
       break;
 
     case 0x6: // Channel A data

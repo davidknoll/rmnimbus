@@ -83,16 +83,16 @@ void loop() {
       switch (req.cs) {
         case 0: req.data = dcb_read(     req.address); break;
         case 1: req.data = parallel_read(req.address); break;
-        case 2: req.data = dcc_read(     req.address); break;
-        case 3: req.data = dsrtc_read(   req.address); break;
+        case 2: req.data = dsrtc_read(   req.address); break;
+        case 3: req.data = dcc_read(     req.address); break;
       }
       device_program_respond(DEVICE_PIO, req.cs, &req);
     } else {
       switch (req.cs) {
         case 0: dcb_write(     req.address, req.data); break;
         case 1: parallel_write(req.address, req.data); break;
-        case 2: dcc_write(     req.address, req.data); break;
-        case 3: dsrtc_write(   req.address, req.data); break;
+        case 2: dsrtc_write(   req.address, req.data); break;
+        case 3: dcc_write(     req.address, req.data); break;
       }
     }
   }

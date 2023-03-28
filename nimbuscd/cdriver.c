@@ -3,6 +3,8 @@
 
 static int cd_target = -1;
 
+void badcommand(void) { rhptr->status = DONE | ERROR | UNKNOWN; }
+
 void ioctlinput(void)
 {
 	rh3_t far *rh3 = (rh3_t far *) rhptr;
@@ -34,7 +36,6 @@ void inputflush(void) { rhptr->status = DONE; }
 void ioctloutput(void) { rhptr->status = DONE; }
 void deviceopen(void) { rhptr->status = DONE; }
 void deviceclose(void) { rhptr->status = DONE; }
-void badcommand(void) { rhptr->status = DONE | ERROR | UNKNOWN; }
 
 void readlong(void)
 {
@@ -52,6 +53,8 @@ void readlongprefetch(void) { rhptr->status = DONE; }
 void seek(void) { rhptr->status = DONE; }
 void playaudio(void) { badcommand(); }
 void stopaudio(void) { badcommand(); }
+void writelong(void) { badcommand(); }
+void writelongverify(void) { badcommand(); }
 void resumeaudio(void) { badcommand(); }
 
 /* Initialisation code below (can be overwritten) */

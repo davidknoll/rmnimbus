@@ -149,7 +149,7 @@ typedef struct rh_read_long_struct {
 	unsigned char	rmode;		/*  read mode 0=cooked / 1=raw	*/
 	unsigned char	isize;		/*  interleave size		*/
 	unsigned char	iskip;		/*  interleave skip factor	*/
-} rh128_t, rh130_t;
+} rh128_t, rh130_t, rh134_t, rh136_t;
 
 typedef struct rh_seek_struct {
 	rh_t		rh;		/*  fixed portion		*/
@@ -158,6 +158,13 @@ typedef struct rh_seek_struct {
 	unsigned int	count;		/*  sector count		*/
 	unsigned long	start;		/*  starting sector		*/
 } rh131_t;
+
+typedef struct rh_play_audio_struct {
+	rh_t		th;		/*  fixed portion		*/
+	unsigned char	adr_mode;	/*  0 for HSG CD ROM type	*/
+	unsigned long	start;		/*  starting sector		*/
+	unsigned long	count;		/*  sector count		*/
+} rh132_t;
 
 /* IOCTL input/output structures */
 
@@ -281,17 +288,20 @@ extern int sasi_read_capacity(unsigned char target, unsigned char lun, unsigned 
 extern int sasi_inquiry(unsigned char target, unsigned char lun, unsigned char bufsz, unsigned char far *buf);
 
 /* cdriver.c */
+extern void badcommand(void);
+
 extern void init(void);
 extern void ioctlinput(void);
 extern void inputflush(void);
 extern void ioctloutput(void);
 extern void deviceopen(void);
 extern void deviceclose(void);
-extern void badcommand(void);
 
 extern void readlong(void);
 extern void readlongprefetch(void);
 extern void seek(void);
 extern void playaudio(void);
 extern void stopaudio(void);
+extern void writelong(void);
+extern void writelongverify(void);
 extern void resumeaudio(void);

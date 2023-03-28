@@ -190,8 +190,8 @@ wascd:		mov	ah,0		;clear hi order
 	EXTRN	_seek:near
 	EXTRN	_playaudio:near
 	EXTRN	_stopaudio:near
-;	EXTRN	_writelong:near
-;	EXTRN	_writelongverify:near
+	EXTRN	_writelong:near
+	EXTRN	_writelongverify:near
 	EXTRN	_resumeaudio:near
 
 ;CMDTAB is the command table that contains the word address
@@ -235,8 +235,8 @@ CMDTAB2	label	word				; CD-ROM devices only
 	dw	DGROUP:_seek			; seek
 	dw	DGROUP:_playaudio		; play audio
 	dw	DGROUP:_stopaudio		; stop audio
-	dw	DGROUP:_badcommand		; write long
-	dw	DGROUP:_badcommand		; write long verify
+	dw	DGROUP:_writelong		; write long
+	dw	DGROUP:_writelongverify		; write long verify
 	dw	DGROUP:_resumeaudio		; resume audio
 
 _interrupt	endp			;end of _interrupt
