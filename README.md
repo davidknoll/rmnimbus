@@ -9,10 +9,11 @@ Unless otherwise stated, anything here that was made by me can be used/distribut
 * ***nimbuscd*** - This contains some experiments with using a SCSI CD-ROM drive (initially, emulated with BlueSCSI) on the PC-186 with original DCB. I'm hoping to make it into `nimbuscd.sys`, a CD-ROM device driver to use with MSCDEX.
 * ***nimbusmouse*** - I saw [this PS/2 mouse adaptor](https://www.thenimbus.co.uk/upgrades-and-maintenance/ps2mouse) and thought it could be done with a smaller microcontroller (specifically, an ATtiny2313 using [ATTinyCore](https://github.com/SpenceKonde/ATTinyCore)).
   * My version isn't working at the moment, but I've had aspects of it working. Work in progress.
-* ***nimbusrtc*** - Attach a DS12C887A RTC pretty much directly to the bus as an expansion card. Prototype PCB passes basic testing.
+* ***nimbusrtc*** - Attach a DS12C887A RTC pretty much directly to the bus as an expansion card.
   * This and similar RTCs are made for a multiplexed bus, so no extra latches and buffers are necessary. But because the Nimbus I/O bus is just half of a 16-bit bus, it only sees accesses where A0 is 0. The bus is shifted by one bit to make sure A0 can be 0 and the RTC registers can all still be accessed. The shift is reversed in software.
   * Not all of the RTC's RAM is accessible due to the available address space in one slot. Only chip selects 0, 2 and 4 can be used, as we also need to make sure A7 is 0 to address the right half of the RTC. Chip select 0 and interrupt 0 are generally reserved for the disk controller. An interrupt is unnecessary for the RTC if only using simple get/set commands.
-  * The get/set commands provided can be compiled on the Nimbus itself using Microsoft QuickC under SETPC. They default to expecting the RTC in slot 4, but this can be set with a switch ```/0``` - ```/4```.
+  * There is a device driver that can be loaded from CONFIG.SYS to use the RTC on startup and with the TIME and DATE commands.
+  * Alternatively, the get/set commands provided can be compiled on the Nimbus itself using Microsoft QuickC under SETPC. They default to expecting the RTC in slot 4, but this can be set with a switch ```/0``` - ```/4```.
 * ***PC-386 RAM*** - Incomplete attempts at reproducing a decent size memory module for the PC-386.
 * ***Piconet transceiver*** - Facilitates connecting a microcontroller to Piconet. Prototype PCBs so far untested- suspected pinout problem.
 * ***piexpansion*** - Put a Raspberry Pi Pico W with an SD card on the PC-186 expansion bus, to hopefully emulate any physical expansion card, even the disk controller. Prototype PCB passes basic testing.
