@@ -2,12 +2,13 @@
  * I/O Device Emulator for RM Nimbus PC-186
  */
 
-#include <Arduino_JSON.h>
 #include <ArduinoOTA.h>
-#include <CircularBuffer.h>
-#include <HTTPClient.h>
+#include <CircularBuffer.hpp>
+#include <NTPClient.h>
 #include <SDFS.h>
+#include <SerialBT.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
 #include <hardware/pio.h>
 #include <hardware/rtc.h>
 #include <hardware/watchdog.h>
@@ -26,7 +27,7 @@
 #define bintobcd(b) ((((b) / 10) << 4) | ((b) % 10))
 #define bcdtobin(b) ((((b) >> 4) * 10) + ((b) & 0x0F))
 
-#define TIMEZONE "Europe/London"
+#define TZ_OFFSET 0L
 #define SD_CS_PIN 17
 #define DEVICE_PIO pio0
 
@@ -41,16 +42,16 @@ volatile bool parallel_irq_flag = false;
 volatile bool dcc_irq_flag      = false;
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin();
   Serial.println("Booting I/O Device Emulator for RM Nimbus PC-186");
 
+  init_pio();
   alarm_pool_init_default();
   init_wifi();
   init_time();
   init_rtc();
   init_ota();
   init_sd();
-  init_pio();
   dcb_setup();
   parallel_setup();
   dcc_setup();
@@ -65,6 +66,7 @@ void loop() {
   parallel_loop();
   dcc_loop();
 
+  // If /RESET is asserted by the Nimbus, reboot this card using the watchdog
   if (!digitalRead(nRESET)) {
     watchdog_enable(1, 1);
     while (1);

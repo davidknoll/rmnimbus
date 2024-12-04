@@ -1,13 +1,14 @@
 /**
  * Connect to a WiFi network using details from the secrets file
+ * and activate the Bluetooth serial port
  */
 void init_wifi() {
   uint8_t mac[WL_MAC_ADDR_LENGTH];
   char hostname[20];
   WiFi.macAddress(mac);
   sprintf(hostname, "nimbus-%02x%02x%02x", mac[3], mac[4], mac[5]);
-  WiFi.setHostname(hostname);
 
+  WiFi.setHostname(hostname);
   WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASS);
   WiFi.waitForConnectResult();
 
@@ -15,31 +16,29 @@ void init_wifi() {
   Serial.println(WiFi.getHostname());
   Serial.print("Local IP address: ");
   Serial.println(WiFi.localIP());
+
+  SerialBT.setName(hostname);
+  SerialBT.begin();
 }
 
 /**
- * Set the system timer to local time over WiFi using World Time API
+ * Set the system timer to local time over WiFi using NTP
  */
 void init_time() {
-  HTTPClient http;
-  if (http.begin("http://worldtimeapi.org/api/timezone/" TIMEZONE)) {
-    if (http.GET() > 0) {
-      JSONVar timedata = JSON.parse(http.getString());
-      struct timeval tv = {
-        (long) timedata["unixtime"] + (long) timedata["raw_offset"] +
-        ((bool) timedata["dst"] ? (long) timedata["dst_offset"] : 0),
-        0
-      };
-      settimeofday(&tv, nullptr);
+  WiFiUDP ntpUDP;
+  NTPClient timeClient(ntpUDP, TZ_OFFSET);
+  timeClient.begin();
+  timeClient.update();
 
-      time_t now = time(nullptr);
-      Serial.print("Public IP address: ");
-      Serial.println((const char *) timedata["client_ip"]);
-      Serial.print("Current time: ");
-      Serial.print(ctime(&now));
-    }
-    http.end();
+  if (timeClient.isTimeSet()) {
+    struct timeval tv = { timeClient.getEpochTime(), 0 };
+    settimeofday(&tv, nullptr);
+
+    time_t now = time(nullptr);
+    Serial.print("Current time: ");
+    Serial.print(ctime(&now));
   }
+  timeClient.end();
 }
 
 /**

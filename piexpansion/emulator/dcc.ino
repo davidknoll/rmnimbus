@@ -101,10 +101,10 @@ void dcc_loop() {
       }
     } else {
       dcc_client.stop();
-      dcc_client = dcc_server.available();
+      dcc_client = dcc_server.accept();
     }
   } else {
-    dcc_client = dcc_server.available();
+    dcc_client = dcc_server.accept();
   }
 }
 

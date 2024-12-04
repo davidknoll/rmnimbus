@@ -542,6 +542,7 @@ fn_init         pusha
 .nortc          lea dx,[header]                 ; Everything can be overwritten
                 mov word es:[di+0xE],dx
                 mov word es:[di+0x10],cs
+                mov word cs:[header+0x4],0
                 lea dx,[msg_no]
                 jmp .msgrtn
 
