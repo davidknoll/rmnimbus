@@ -31,6 +31,9 @@
 #define SD_CS_PIN 17
 #define DEVICE_PIO pio0
 
+#define DCB_ENABLE_FLOPPY 0
+#define DCB_ENABLE_SASI   1
+
 #define PARALLEL_DEBUG 0
 #define PARALLEL_TCP_PORTA 1100
 #define PARALLEL_TCP_PORTB 1101

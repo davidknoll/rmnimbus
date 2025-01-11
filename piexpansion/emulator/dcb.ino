@@ -3,12 +3,24 @@ static volatile uint8_t dcb_command = 0x00;
 static volatile uint8_t dcb_track   = 0x00;
 static volatile uint8_t dcb_sector  = 0x00;
 static volatile uint8_t dcb_control = 0x00;
+volatile uint8_t dcb_sasist  = 0x08;
+volatile uint8_t dcb_sasictl = 0x00;
 
 static volatile alarm_id_t dcb_alarm = 0;
 static volatile bool dcb_stepdir = false;
+static volatile bool dcb_fdc_irq = false;
+static volatile bool dcb_fdc_dma = false;
+static volatile bool dcb_sasi_dma = false;
 
 CircularBuffer<uint8_t,1024> dcb_readbuf;
 CircularBuffer<uint8_t,1024> dcb_writebuf;
+
+volatile uint8_t dcb_sasi_cmdbuf[16];
+volatile uint8_t dcb_sasi_databuf[65536];
+volatile uint8_t dcb_sasi_sensebuf[4];
+volatile int dcb_sasi_index  = 0;
+volatile int dcb_sasi_remain = 0;
+volatile int dcb_sasi_target = 0;
 
 static const uint dcb_stepdelays[] = { 3, 6, 10, 15 };
 
@@ -60,17 +72,137 @@ void dcb_setup() {
  * To be called during sketch loop()
  */
 void dcb_loop() {
-  // Nothing here yet
+#if DCB_ENABLE_SASI
+  dcb_sasi_process_command();
+  dcb_update_sasi();
+#endif
+  dcb_update_irq_dma();
+}
+
+void dcb_sasi_return_status(uint status, uint sense, uint lba) {
+  // Format the sense data (as on the Xebec S1410A)
+  dcb_sasi_sensebuf[0] = sense;
+  dcb_sasi_sensebuf[1] = ((lba >> 16) & 0x1F) | (dcb_sasi_cmdbuf[1] & 0xE0);
+  dcb_sasi_sensebuf[2] = lba >> 8;
+  dcb_sasi_sensebuf[3] = lba;
+
+  // Transition to input status, ending the command
+  dcb_sasi_databuf[0] = status;
+  dcb_sasi_index = 0;
+  dcb_sasi_remain = 1;
+  dcb_sasist = 0xF8;
+}
+
+static void dcb_update_sasi() {
+  // SASI status bits:
+  //   0x80 - REQ     - feeds from /REQ
+  //   0x40 - COMMAND - feeds from /C / D
+  //   0x20 - IN      - feeds from /I / O
+  //   0x10 - BUSY    - feeds from /BUSY
+  //   0x08 - /MSG    - feeds from /MSG not inverted
+  // SASI control bits:
+  //   0x04 - SINTEN  - enable SASI interrupt
+  //   0x02 - SEL     - feeds into /SEL and /ACK
+  //   0x01 - RST     - feeds into /RST
+  // SASI interrupt:
+  //   AND(SINTEN, COMMAND, IN, REQ)
+  //   ie. enabled, and requesting "input status" or "input message" phase
+  // SASI DMA:
+  //   Enabled when floppy control register bit 6 set
+  //   Asserted upon assertion of REQ
+  //   Deasserted upon read/write of data register with COMMAND not set
+  // The Nimbus SASI controller is incapable in hardware of:
+  //   arbitration, as its /BUSY is an input only
+  //   message out, as it has no /ATN signal
+
+  // Partial SASI state machine
+  if (dcb_sasictl & 0x01) {
+    // Reset asserted, return to idle
+    dcb_sasi_dma = false;
+    dcb_sasi_remain = 0;
+    dcb_sasist = 0x08;
+
+  } else if (
+    !(dcb_sasist      & 0x10) &&  // Not busy
+     (dcb_sasictl     & 0x02) &&  // Selecting
+     (dcb_sasi_target & (1 << 0)) // Target ID
+  ) {
+    // Transition from controller selection to command mode
+    dcb_sasi_index = 0;
+    dcb_sasi_remain = 6;
+    dcb_sasist = 0xD8;
+
+  } else if (dcb_sasist == 0xD8 && dcb_sasi_index == 1) {
+    // Any other class is assumed to be 6 bytes
+    switch (dcb_sasi_cmdbuf[0] >> 5) {
+      case 1: // 10-byte command
+      case 2:
+        dcb_sasi_remain = 9;
+        break;
+      case 4: // 16-byte command
+        dcb_sasi_remain = 15;
+        break;
+      case 5: // 12-byte command
+        dcb_sasi_remain = 11;
+        break;
+    }
+
+  } else if (dcb_sasist == 0xD8 && !dcb_sasi_remain) {
+    // Transition from output command to busy/processing
+    dcb_sasi_index = 0;
+    dcb_sasist = 0x58;
+
+  } else if (dcb_sasist == 0xB8 && !dcb_sasi_remain) {
+    // Transition from input data to busy/processing
+    dcb_sasist = 0x38;
+
+  } else if (dcb_sasist == 0x98 && !dcb_sasi_remain) {
+    // Transition from output data to busy/processing
+    dcb_sasist = 0x18;
+
+  } else if (dcb_sasist == 0xF8 && !dcb_sasi_remain) {
+    // Transition from input status to input message,
+    // that message being COMMAND COMPLETE
+    dcb_sasi_databuf[0] = 0x00;
+    dcb_sasi_index = 0;
+    dcb_sasi_remain = 1;
+    dcb_sasist = 0xF0;
+
+  } else if (dcb_sasist == 0xF0 && !dcb_sasi_remain) {
+    // Transition from input message to idle
+    dcb_sasist = 0x08;
+  }
+
+  if (dcb_sasist & 0x80) { dcb_sasi_dma = true; }
+}
+
+static void dcb_update_irq_dma() {
+  // Update IRQ and DMA pins
+  bool irq = false, dma = false;
+#if DCB_ENABLE_FLOPPY
+  irq = irq || dcb_fdc_irq;
+  dma = dma || ((dcb_control & 0x80) && dcb_fdc_dma);
+#endif
+#if DCB_ENABLE_SASI
+  irq = irq || (
+    (dcb_sasictl & 0x04) &&
+    ((dcb_sasist & 0xE0) == 0xE0)
+  );
+  dma = dma || ((dcb_control & 0x40) && dcb_sasi_dma);
+#endif
+  digitalWrite(nINT0, irq ? LOW : HIGH);
+  digitalWrite(nDMA,  dma ? LOW : HIGH);
 }
 
 /**
  * Read from an emulated Disc Controller Board
  */
 uint dcb_read(uint address) {
-  uint data = 0x00;
+  uint data = 0xFF;
   switch (address & 0x1E) {
+#if DCB_ENABLE_FLOPPY
     case 0x08: // FDC status
-      digitalWrite(nINT0, HIGH);
+      dcb_fdc_irq = false;
       data = dcb_status;
       break;
     case 0x0A: // FDC track
@@ -84,13 +216,41 @@ uint dcb_read(uint address) {
       data = dcb_readbuf.shift();
       dcb_alarm = add_alarm_in_us(16, dcb_callback_readbyte, nullptr, true);
       break;
+#endif
 
     case 0x10: // SASI status
     case 0x12:
     case 0x14:
     case 0x16:
-      if (dcb_control & 0x20) { data = 0x04; } // Motor on?
+#if DCB_ENABLE_FLOPPY
+      data &= ~0x07;
+      if (dcb_control & 0x20) { data |= 0x04; } // Motor on?
+#endif
+#if DCB_ENABLE_SASI
+      data &= ~0xF8;
+      data |= (dcb_sasist & 0xF8);
+#endif
       break;
+
+#if DCB_ENABLE_SASI
+    case 0x18: // SASI data
+    case 0x1A:
+    case 0x1C:
+    case 0x1E:
+      dcb_sasi_dma = false;
+      if (dcb_sasi_remain) {
+        switch (dcb_sasist & 0xF8) {
+          case 0xB8: // Input data
+          case 0xF0: // Input message
+          case 0xF8: // Input status
+            data = dcb_sasi_databuf[dcb_sasi_index];
+            dcb_sasi_index++;
+            dcb_sasi_remain--;
+            break;
+        }
+      }
+      break;
+#endif
   }
   return data;
 }
@@ -106,10 +266,12 @@ void dcb_write(uint address, uint data) {
     case 0x06:
       dcb_control = data;
       break;
+
+#if DCB_ENABLE_FLOPPY
     case 0x08: // FDC command
       cancel_alarm(dcb_alarm);
-      digitalWrite(nDMA,  HIGH);
-      digitalWrite(nINT0, HIGH);
+      dcb_fdcclrdrq();
+      dcb_fdc_irq = false;
       dcb_command = data;
       dcb_docommand();
       break;
@@ -123,6 +285,40 @@ void dcb_write(uint address, uint data) {
       dcb_fdcclrdrq();
       dcb_writebuf.push(data);
       break;
+#endif
+
+    case 0x10: // SASI control
+    case 0x12:
+    case 0x14:
+    case 0x16:
+      dcb_sasictl = data;
+      break;
+
+#if DCB_ENABLE_SASI
+    case 0x18: // SASI data
+    case 0x1A:
+    case 0x1C:
+    case 0x1E:
+      dcb_sasi_dma = false;
+      if (!(dcb_sasist & 0x10)) {
+        dcb_sasi_target = data;
+      } else if (dcb_sasi_remain) {
+        switch (dcb_sasist & 0xF8) {
+          case 0x98: // Output data
+          case 0xD0: // Output message
+            dcb_sasi_databuf[dcb_sasi_index] = data;
+            dcb_sasi_index++;
+            dcb_sasi_remain--;
+            break;
+          case 0xD8: // Output command
+            dcb_sasi_cmdbuf[dcb_sasi_index] = data;
+            dcb_sasi_index++;
+            dcb_sasi_remain--;
+            break;
+        }
+      }
+      break;
+#endif
   }
 }
 
@@ -196,14 +392,14 @@ static void dcb_type4() {
     dcb_alarm = add_alarm_in_ms(200, dcb_callback_index, nullptr, true);
   }
   if (dcb_command & 0x8) { // Immediate interrupt
-    digitalWrite(nINT0, LOW);
+    dcb_fdc_irq = true;
   }
 }
 
 static int64_t dcb_callback_index(alarm_id_t id, void *user_data) {
   if (dcb_control & 0x20) { // Motor on?
     dcb_status |= 0x02;     // Index pulse
-    digitalWrite(nINT0, LOW);
+    dcb_fdc_irq = true;
   }
   return -200000;           // 3.5" at 300 rpm means 1 rev takes 0.2s
 }
@@ -220,7 +416,7 @@ static void dcb_schedule_irqbusy() {
 
 static int64_t dcb_callback_irqbusy(alarm_id_t id, void *user_data) {
   dcb_status &= ~0x01;
-  digitalWrite(nINT0, LOW);
+  dcb_fdc_irq = true;
   return 0;
 }
 
@@ -300,10 +496,10 @@ static int64_t dcb_callback_readbyte(alarm_id_t id, void *user_data) {
 
 static void dcb_fdcsetdrq() {
   dcb_status |=  0x02;
-  if (dcb_control & 0x80) { digitalWrite(nDMA, LOW); }
+  dcb_fdc_dma = true;
 }
 
 static void dcb_fdcclrdrq() {
   dcb_status &= ~0x02;
-  digitalWrite(nDMA, HIGH);
+  dcb_fdc_dma = false;
 }
