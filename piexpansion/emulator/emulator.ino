@@ -15,6 +15,8 @@
 #include <sys/time.h>
 #include <time.h>
 
+#include "DeviceBase.h"
+#include "DeviceDsrtc.h"
 #include "arduino_secrets.h"
 #include "device.pio.h"
 
@@ -22,8 +24,8 @@
 #include <Adafruit_TinyUSB.h>
 #endif
 
-#define rol(b) ((((b) >> 7) & 1) | ((b) << 1))
-#define ror(b) ((((b) << 7) & 0x80) | ((b) >> 1))
+#define rol(b) ((((b) >> 7) & 0x01) | (((b) << 1) & 0xFE))
+#define ror(b) ((((b) << 7) & 0x80) | (((b) >> 1) & 0x7F))
 #define bintobcd(b) ((((b) / 10) << 4) | ((b) % 10))
 #define bcdtobin(b) ((((b) >> 4) * 10) + ((b) & 0x0F))
 
@@ -41,6 +43,7 @@
 
 #define DCC_DEBUG 0
 
+DeviceBase *slot[4]; // Board supports slots 0-3
 volatile bool parallel_irq_flag = false;
 volatile bool dcc_irq_flag      = false;
 
@@ -55,8 +58,11 @@ void setup() {
   init_rtc();
   init_ota();
   init_sd();
+
   dcb_setup();
   parallel_setup();
+  slot[2] = new DeviceDsrtc();
+  slot[2]->setup();
   dcc_setup();
 
   Serial.println("Ready");
@@ -75,6 +81,7 @@ void loop() {
     while (1);
   }
 
+  digitalWrite(nINT1, slot[2]->irq() ? LOW : HIGH);
   digitalWrite(nINT2, (parallel_irq_flag || dcc_irq_flag) ? LOW : HIGH);
 
   // Check and respond to a pending request from the Nimbus
@@ -88,7 +95,7 @@ void loop() {
       switch (req.cs) {
         case 0: req.data = dcb_read(     req.address); break;
         case 1: req.data = parallel_read(req.address); break;
-        case 2: req.data = dsrtc_read(   req.address); break;
+        case 2: req.data = slot[2]->read(req.address); break;
         case 3: req.data = dcc_read(     req.address); break;
       }
       device_program_respond(DEVICE_PIO, req.cs, &req);
@@ -96,7 +103,7 @@ void loop() {
       switch (req.cs) {
         case 0: dcb_write(     req.address, req.data); break;
         case 1: parallel_write(req.address, req.data); break;
-        case 2: dsrtc_write(   req.address, req.data); break;
+        case 2: slot[2]->write(req.address, req.data); break;
         case 3: dcc_write(     req.address, req.data); break;
       }
     }
