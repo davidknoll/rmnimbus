@@ -7,6 +7,8 @@ DeviceParallel::DeviceParallel(void)
  * To be called during sketch setup()
  */
 void DeviceParallel::setup(void) {
+  DeviceBase::setup();
+
   // 6522 VIA registers
   _orb  = 0x00;
   _irb  = 0xFF;

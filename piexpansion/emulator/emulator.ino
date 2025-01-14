@@ -48,9 +48,11 @@
 DeviceBase *slot[4]; // Board supports slots 0-3
 
 void setup() {
+  int i;
   Serial.begin();
   Serial.println("Booting I/O Device Emulator for RM Nimbus PC-186");
 
+  init_reset();
   init_pio();
   alarm_pool_init_default();
   init_wifi();
@@ -59,31 +61,34 @@ void setup() {
   init_ota();
   init_sd();
 
-  dcb_setup();
+  // Card select assignments
+  // slot[0] = new DeviceDcb();
   slot[1] = new DeviceParallel();
-  slot[1]->setup();
   slot[2] = new DeviceDsrtc();
-  slot[2]->setup();
   slot[3] = new DeviceDcc();
-  slot[3]->setup();
+
+  dcb_setup();
+  for (i = 0; i < 4; i++) {
+    if (slot[i]) {
+      slot[i]->setup();
+    }
+  }
 
   Serial.println("Ready");
 }
 
 void loop() {
+  int i;
   struct busreq req;
   ArduinoOTA.handle();
   dcb_loop();
-  slot[1]->loop();
-  slot[2]->loop();
-  slot[3]->loop();
-
-  // If /RESET is asserted by the Nimbus, reboot this card using the watchdog
-  if (!digitalRead(nRESET)) {
-    watchdog_enable(1, 1);
-    while (1);
+  for (i = 0; i < 4; i++) {
+    if (slot[i]) {
+      slot[i]->loop();
+    }
   }
 
+  // IRQ / DMA assignments
   // digitalWrite(nDMA, (slot[0]->dma() || slot[3]->dma()) ? LOW : HIGH);
   // digitalWrite(nINT0, slot[0]->irq() ? LOW : HIGH);
   digitalWrite(nINT1, slot[2]->irq() ? LOW : HIGH);
@@ -98,18 +103,18 @@ void loop() {
   ) {
     if (req.isread) {
       switch (req.cs) {
-        case 0: req.data = dcb_read(     req.address); break;
-        case 1: req.data = slot[1]->read(req.address); break;
-        case 2: req.data = slot[2]->read(req.address); break;
-        case 3: req.data = slot[3]->read(req.address); break;
+        case 0: req.data = dcb_read(req.address); break;
+        default: if (slot[req.cs]) {
+          req.data = slot[req.cs]->read(req.address);
+        }
       }
       device_program_respond(DEVICE_PIO, req.cs, &req);
     } else {
       switch (req.cs) {
-        case 0: dcb_write(     req.address, req.data); break;
-        case 1: slot[1]->write(req.address, req.data); break;
-        case 2: slot[2]->write(req.address, req.data); break;
-        case 3: slot[3]->write(req.address, req.data); break;
+        case 0: dcb_write(req.address, req.data); break;
+        default: if (slot[req.cs]) {
+          slot[req.cs]->write(req.address, req.data);
+        }
       }
     }
   }

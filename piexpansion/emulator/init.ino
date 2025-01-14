@@ -95,3 +95,28 @@ void init_pio() {
   device_program_init(DEVICE_PIO, 2, offset, 2);
   device_program_init(DEVICE_PIO, 3, offset, 3);
 }
+
+static void _rebootme(void) { rp2040.reboot(); }
+
+/**
+ * Enable reset by the Nimbus, output reset reason
+ */
+void init_reset() {
+  rp2040.enableDoubleResetBootloader();
+
+  pinMode(nRESET, INPUT);
+  attachInterrupt(digitalPinToInterrupt(nRESET), _rebootme, LOW);
+
+  Serial.print("Reset reason: ");
+  switch (rp2040.getResetReason()) {
+    case RP2040::UNKNOWN_RESET:  Serial.println("unknown");        break;
+    case RP2040::PWRON_RESET:    Serial.println("power on");       break;
+    case RP2040::RUN_PIN_RESET:  Serial.println("RUN pin");        break;
+    case RP2040::SOFT_RESET:     Serial.println("software");       break;
+    case RP2040::WDT_RESET:      Serial.println("watchdog");       break;
+    case RP2040::DEBUG_RESET:    Serial.println("debugger");       break;
+    case RP2040::GLITCH_RESET:   Serial.println("power glitch");   break;
+    case RP2040::BROWNOUT_RESET: Serial.println("power brownout"); break;
+    default:                     Serial.println("(new)");
+  }
+}
