@@ -16,6 +16,7 @@
 #include <time.h>
 
 #include "DeviceBase.h"
+#include "DeviceDcc.h"
 #include "DeviceDsrtc.h"
 #include "DeviceParallel.h"
 #include "arduino_secrets.h"
@@ -45,7 +46,6 @@
 #define DCC_DEBUG 0
 
 DeviceBase *slot[4]; // Board supports slots 0-3
-volatile bool dcc_irq_flag      = false;
 
 void setup() {
   Serial.begin();
@@ -64,7 +64,8 @@ void setup() {
   slot[1]->setup();
   slot[2] = new DeviceDsrtc();
   slot[2]->setup();
-  dcc_setup();
+  slot[3] = new DeviceDcc();
+  slot[3]->setup();
 
   Serial.println("Ready");
 }
@@ -75,7 +76,7 @@ void loop() {
   dcb_loop();
   slot[1]->loop();
   slot[2]->loop();
-  dcc_loop();
+  slot[3]->loop();
 
   // If /RESET is asserted by the Nimbus, reboot this card using the watchdog
   if (!digitalRead(nRESET)) {
@@ -83,8 +84,10 @@ void loop() {
     while (1);
   }
 
+  // digitalWrite(nDMA, (slot[0]->dma() || slot[3]->dma()) ? LOW : HIGH);
+  // digitalWrite(nINT0, slot[0]->irq() ? LOW : HIGH);
   digitalWrite(nINT1, slot[2]->irq() ? LOW : HIGH);
-  digitalWrite(nINT2, (slot[1]->irq() || dcc_irq_flag) ? LOW : HIGH);
+  digitalWrite(nINT2, (slot[1]->irq() || slot[3]->irq()) ? LOW : HIGH);
 
   // Check and respond to a pending request from the Nimbus
   if (
@@ -98,7 +101,7 @@ void loop() {
         case 0: req.data = dcb_read(     req.address); break;
         case 1: req.data = slot[1]->read(req.address); break;
         case 2: req.data = slot[2]->read(req.address); break;
-        case 3: req.data = dcc_read(     req.address); break;
+        case 3: req.data = slot[3]->read(req.address); break;
       }
       device_program_respond(DEVICE_PIO, req.cs, &req);
     } else {
@@ -106,7 +109,7 @@ void loop() {
         case 0: dcb_write(     req.address, req.data); break;
         case 1: slot[1]->write(req.address, req.data); break;
         case 2: slot[2]->write(req.address, req.data); break;
-        case 3: dcc_write(     req.address, req.data); break;
+        case 3: slot[3]->write(req.address, req.data); break;
       }
     }
   }
