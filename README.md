@@ -21,3 +21,4 @@ Unless otherwise stated, anything here that was made by me can be used/distribut
   * This doesn't write the sector to the disk itself, as I don't have access to the system programmer's manual that would probably tell me how to do that. The sector is written to stdout instead, and you'll need to write it to the disk separately. (Which is made a whole lot simpler if using a SCSI2SD.)
   * You then need to run STAMP and/or HARDDISK on the Nimbus to partition the disk. I found a 64MB limit on DOS partition size, with only one DOS partition supported per disk.
   * This is not a replacement for an actual low-level format if you need one.
+* ***simmadaptor*** - Adaptors for 30 or 72 pin SIMMs on the 186. Not yet tested, prototype PCBs ordered.
