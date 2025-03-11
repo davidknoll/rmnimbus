@@ -115,9 +115,8 @@ int main(int argc, char *argv[])
 
   // Check the file format is one that we implement
   if (
-    strncmp(framedata, "YM5!LeOnArD!", 12) || // Uncompressed YM5
-    getuint16be(framedata + 20)            || // No digidrums
-    getuint16be(framedata + 32)               // No additional data
+    strncmp(framedata, "YM5!LeOnArD!", 12) && // Uncompressed YM5
+    strncmp(framedata, "YM6!LeOnArD!", 12)    // Uncompressed YM6
   ) {
     fprintf(stderr, "Invalid or unimplemented file format\n");
     fclose(fp);
@@ -132,6 +131,12 @@ int main(int argc, char *argv[])
   framesize  = 16;
 
   offset = 34;
+  loadcount = getuint16be(framedata + 20);
+  while (loadcount--) {
+    offset += getuint32be(framedata + offset) + 4;
+  }
+  offset += getuint16be(framedata + 32);
+
   printf("Title:   %s\n", framedata[0] ? (framedata + offset) : "(none)");
   offset += strlen(framedata + offset) + 1;
   printf("Author:  %s\n", framedata[0] ? (framedata + offset) : "(none)");
@@ -141,7 +146,7 @@ int main(int argc, char *argv[])
 
   printf("Frame count:     %lu (%um%us at 50Hz)\n",
     framecount, framecount / 3000, (framecount % 3000) / 50);
-  printf("Song attributes: 0x%08X\n", songattr);
+  printf("Song attributes: 0x%08lX\n", songattr);
   printf("Digidrums:       %u (not implemented)\n",
     getuint16be(framedata + 20));
   printf("YM input clock:  %#01.2fMHz (Nimbus is 2MHz)\n",
@@ -149,7 +154,7 @@ int main(int argc, char *argv[])
   printf("Frame rate:      %uHz (Nimbus is 50Hz)\n",
     getuint16be(framedata + 26));
   printf("Loop from frame: %lu\n",    frameloop);
-  printf("Data offset:     0x%X\n",   offset);
+  printf("Data offset:     0x%lX\n",  offset);
 
   // Read entire audio data
   framedata = realloc(framedata, framecount * framesize);
