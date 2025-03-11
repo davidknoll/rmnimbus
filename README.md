@@ -22,3 +22,4 @@ Unless otherwise stated, anything here that was made by me can be used/distribut
   * You then need to run STAMP and/or HARDDISK on the Nimbus to partition the disk. I found a 64MB limit on DOS partition size, with only one DOS partition supported per disk.
   * This is not a replacement for an actual low-level format if you need one.
 * ***simmadaptor*** - Adaptors for 30 or 72 pin SIMMs on the 186. Not yet tested, prototype PCBs ordered.
+* ***ymplay*** - Play YM chiptune audio files using the AY-3-8910 in the Nimbus.
