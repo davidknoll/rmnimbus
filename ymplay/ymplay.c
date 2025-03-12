@@ -4,10 +4,13 @@
  */
 
 #include <conio.h>
+#include <dos.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../nimbuscd/ioports.h"
+#define HEADER_SIZE 256
 
 unsigned long framecount; // Number of frames in the song
 unsigned long songattr;   // Song attributes
@@ -31,8 +34,9 @@ unsigned long getuint32be(const unsigned char *ptr)
 void wait_for_vblank(void)
 {
   // Poll the timer already used for the 50Hz interrupt
+  // The DOS call allows Ctrl-C to take effect during playback
   outpw(IO_186_T2CTL, inpw(IO_186_T2CTL) & ~0x0020);
-  while (!(inpw(IO_186_T2CTL) & 0x0020));
+  while (!(inpw(IO_186_T2CTL) & 0x0020)) { bdos(0x0B, 0, 0); }
 }
 
 void write_ay(unsigned char reg, unsigned char data)
@@ -76,6 +80,12 @@ void play_song(void)
   }
 }
 
+void ctrlc_handler(int sig)
+{
+  write_ay(7, 0x3F); // Silence
+  exit(1);
+}
+
 int main(int argc, char *argv[])
 {
   unsigned long frameloop, offset, loadcount, loadresult;
@@ -84,6 +94,7 @@ int main(int argc, char *argv[])
   FILE *fp;
 
   printf("YM audio player for Nimbus\n");
+  signal(SIGINT, ctrlc_handler);
   if (argc == 2) {
     loopcount = 1;
     fp = fopen(argv[1], "rb");
@@ -100,13 +111,13 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Could not open file\n");
     return 1;
   }
-  framedata = malloc(256);
+  framedata = malloc(HEADER_SIZE);
   if (!framedata) {
     fprintf(stderr, "Out of memory reading file header\n");
     fclose(fp);
     return 1;
   }
-  if (fread(framedata, 256, 1, fp) != 1) {
+  if (fread(framedata, HEADER_SIZE, 1, fp) != 1) {
     fprintf(stderr, "Could not read file header\n");
     fclose(fp);
     free(framedata);
@@ -137,14 +148,17 @@ int main(int argc, char *argv[])
   }
   offset += getuint16be(framedata + 32);
 
-  printf("Title:   %s\n", framedata[0] ? (framedata + offset) : "(none)");
+  printf("Title:   %s\n",
+    framedata[offset] ? (framedata + offset) : "(none)");
   offset += strlen(framedata + offset) + 1;
-  printf("Author:  %s\n", framedata[0] ? (framedata + offset) : "(none)");
+  printf("Author:  %s\n",
+    framedata[offset] ? (framedata + offset) : "(none)");
   offset += strlen(framedata + offset) + 1;
-  printf("Comment: %s\n\n", framedata[0] ? (framedata + offset) : "(none)");
+  printf("Comment: %s\n\n",
+    framedata[offset] ? (framedata + offset) : "(none)");
   offset += strlen(framedata + offset) + 1;
 
-  printf("Frame count:     %lu (%um%us at 50Hz)\n",
+  printf("Frame count:     %lu (%lum%lus at 50Hz)\n",
     framecount, framecount / 3000, (framecount % 3000) / 50);
   printf("Song attributes: 0x%08lX\n", songattr);
   printf("Digidrums:       %u (not implemented)\n",
