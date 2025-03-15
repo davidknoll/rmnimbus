@@ -10,13 +10,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../nimbuscd/ioports.h"
-#define HEADER_SIZE 256
 
 unsigned long framecount; // Number of frames in the song
 unsigned long songattr;   // Song attributes
 unsigned char framesize;  // Bytes per frame
 unsigned long framenum;   // Current frame number
-unsigned char *framedata; // Pointer to buffer holding audio data
+unsigned char *filedata;  // Pointer to buffer holding entire file
+unsigned char *framedata; // Pointer to audio data within file
 
 unsigned int getuint16be(const unsigned char *ptr)
 {
@@ -60,7 +60,11 @@ void write_frame(void)
   }
 
   for (i = 0; i < 14; i++) {
-    write_ay(i, *ptr);
+    if (i == 13 && *ptr == 0xFF) {
+      // Skip this register
+    } else {
+      write_ay(i, *ptr);
+    }
 
     // Advance to next register in current frame
     if (songattr & 1) {
@@ -86,11 +90,50 @@ void ctrlc_handler(int sig)
   exit(1);
 }
 
+unsigned long common_56(void)
+{
+  // Skip digidrums
+  unsigned long offset = 34;
+  int drumcount = getuint16be(filedata + 20);
+  while (drumcount--) {
+    offset += getuint32be(filedata + offset) + 4;
+  }
+
+  // Skip additional data
+  offset += getuint16be(filedata + 32);
+
+  printf("YM input clock:  %#01.2fMHz (Nimbus is 2MHz)\n",
+    (float) getuint32be(filedata + 22) / 1000000);
+  printf("Frame rate:      %uHz (Nimbus is 50Hz)\n",
+    getuint16be(filedata + 26));
+
+  return offset;
+}
+
+unsigned long common_456(unsigned long offset)
+{
+  framecount = getuint32be(filedata + 12);
+  songattr   = getuint32be(filedata + 16);
+  framesize  = 16;
+
+  printf("Title:           %s\n",
+    filedata[offset] ? (filedata + offset) : "(none)");
+  offset += strlen(filedata + offset) + 1;
+  printf("Author:          %s\n",
+    filedata[offset] ? (filedata + offset) : "(none)");
+  offset += strlen(filedata + offset) + 1;
+  printf("Comment:         %s\n",
+    filedata[offset] ? (filedata + offset) : "(none)");
+  offset += strlen(filedata + offset) + 1;
+  return offset;
+}
+
 int main(int argc, char *argv[])
 {
-  unsigned long frameloop, offset, loadcount, loadresult;
+  unsigned long offset, loadcount, loadresult, digidrums, frameloop;
   unsigned int loopcount;
   unsigned char *loadptr;
+  long filesize;
   FILE *fp;
 
   printf("YM audio player for Nimbus\n");
@@ -106,105 +149,112 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  // Read YM file header
+  // Read the entire file into memory
   if (!fp) {
     fprintf(stderr, "Could not open file\n");
     return 1;
   }
-  framedata = malloc(HEADER_SIZE);
-  if (!framedata) {
-    fprintf(stderr, "Out of memory reading file header\n");
+  if (fseek(fp, 0, SEEK_END)) {
+    fprintf(stderr, "Could not seek to end of file\n");
     fclose(fp);
     return 1;
   }
-  if (fread(framedata, HEADER_SIZE, 1, fp) != 1) {
-    fprintf(stderr, "Could not read file header\n");
-    fclose(fp);
-    free(framedata);
-    return 1;
-  }
-
-  // Check the file format is one that we implement
-  if (
-    strncmp(framedata, "YM5!LeOnArD!", 12) && // Uncompressed YM5
-    strncmp(framedata, "YM6!LeOnArD!", 12)    // Uncompressed YM6
-  ) {
-    fprintf(stderr, "Invalid or unimplemented file format\n");
-    fclose(fp);
-    free(framedata);
-    return 1;
-  }
-
-  // Extract certain details from the header, note numbers are big-endian
-  framecount = getuint32be(framedata + 12);
-  songattr   = getuint32be(framedata + 16);
-  frameloop  = getuint32be(framedata + 28);
-  framesize  = 16;
-
-  offset = 34;
-  loadcount = getuint16be(framedata + 20);
-  while (loadcount--) {
-    offset += getuint32be(framedata + offset) + 4;
-  }
-  offset += getuint16be(framedata + 32);
-
-  printf("Title:   %s\n",
-    framedata[offset] ? (framedata + offset) : "(none)");
-  offset += strlen(framedata + offset) + 1;
-  printf("Author:  %s\n",
-    framedata[offset] ? (framedata + offset) : "(none)");
-  offset += strlen(framedata + offset) + 1;
-  printf("Comment: %s\n\n",
-    framedata[offset] ? (framedata + offset) : "(none)");
-  offset += strlen(framedata + offset) + 1;
-
-  printf("Frame count:     %lu (%lum%lus at 50Hz)\n",
-    framecount, framecount / 3000, (framecount % 3000) / 50);
-  printf("Song attributes: 0x%08lX\n", songattr);
-  printf("Digidrums:       %u (not implemented)\n",
-    getuint16be(framedata + 20));
-  printf("YM input clock:  %#01.2fMHz (Nimbus is 2MHz)\n",
-    (float) getuint32be(framedata + 22) / 1000000);
-  printf("Frame rate:      %uHz (Nimbus is 50Hz)\n",
-    getuint16be(framedata + 26));
-  printf("Loop from frame: %lu\n",    frameloop);
-  printf("Data offset:     0x%lX\n",  offset);
-
-  // Read entire audio data
-  framedata = realloc(framedata, framecount * framesize);
-  if (!framedata) {
-    fprintf(stderr, "Out of memory reading audio data\n");
+  filesize = ftell(fp);
+  if (filesize < 0) {
+    fprintf(stderr, "Could not determine file size\n");
     fclose(fp);
     return 1;
   }
-  if (fseek(fp, offset, SEEK_SET)) {
-    fprintf(stderr, "Could not seek to audio data\n");
+  filedata = malloc(filesize);
+  if (!filedata) {
+    fprintf(stderr, "Out of memory reading file\n");
     fclose(fp);
-    free(framedata);
     return 1;
   }
+  rewind(fp);
 
   printf("Loading");
   fflush(stdout);
-  loadptr = framedata;
-  loadcount = framecount;
+  loadptr = filedata;
+  loadcount = filesize;
   while (loadcount) {
-    loadresult = fread(loadptr, framesize, min(loadcount, 4000), fp);
+    loadresult = fread(loadptr, 1, min(8192, loadcount), fp);
     if (!loadresult) {
       fprintf(stderr, "\nCould not read audio data\n");
       fclose(fp);
-      free(framedata);
+      free(filedata);
       return 1;
     }
-    loadptr += framesize * loadresult;
+    loadptr += loadresult;
     loadcount -= loadresult;
     putchar('.');
     fflush(stdout);
   }
+  putchar('\n');
 
-  printf("\nPlaying");
+  // Check the file format is one that we implement
+  // Extract certain details from the header, note numbers are big-endian
+  if (!strncmp(filedata, "YM2!", 4)) {
+    offset = 4;
+    digidrums = 0;
+    framesize = 14;
+    songattr = 0x00000001;
+    framecount = (filesize - 4) / 14;
+    frameloop = 0;
+  } else if (!strncmp(filedata, "YM3!", 4)) {
+    offset = 4;
+    digidrums = 0;
+    framesize = 14;
+    songattr = 0x00000001;
+    framecount = (filesize - 4) / 14;
+    frameloop = 0;
+  } else if (!strncmp(filedata, "YM3b", 4)) {
+    offset = 4;
+    digidrums = 0;
+    framesize = 14;
+    songattr = 0x00000001;
+    framecount = (filesize - 8) / 14;
+    frameloop = getuint32be(filedata + filesize - 4);
+
+  } else if (!strncmp(filedata, "YM4!LeOnArD!", 12)) {
+    digidrums = getuint32be(filedata + 20);
+    frameloop = getuint32be(filedata + 24);
+    offset = 28;
+    for (loadcount = 0; loadcount < digidrums; loadcount++) {
+      offset += getuint32be(filedata + offset) + 4;
+    }
+    offset = common_456(offset);
+  } else if (!strncmp(filedata, "YM5!LeOnArD!", 12)) {
+    digidrums = getuint16be(filedata + 20);
+    frameloop = getuint32be(filedata + 28);
+    offset = common_56();
+    offset = common_456(offset);
+  } else if (!strncmp(filedata, "YM6!LeOnArD!", 12)) {
+    digidrums = getuint16be(filedata + 20);
+    frameloop = getuint32be(filedata + 28);
+    offset = common_56();
+    offset = common_456(offset);
+
+  } else {
+    fprintf(stderr, "Invalid or unimplemented file format\n");
+    fclose(fp);
+    free(filedata);
+    return 1;
+  }
+
+  printf("File format:     %c%c%c%c\n",
+    filedata[0], filedata[1], filedata[2], filedata[3]);
+  printf("Song attributes: 0x%08lX\n", songattr);
+  printf("Digidrums:       %lu (not implemented)\n", digidrums);
+  printf("Loop from frame: %lu\n",     frameloop);
+  printf("Data offset:     0x%lX\n",   offset);
+  printf("Frame count:     %lu (%lum%lus at 50Hz)\n",
+    framecount, framecount / 3000, (framecount % 3000) / 50);
+
+  printf("Playing");
   fflush(stdout);
   framenum = 0;
+  framedata = filedata + offset;
   while (loopcount--) {
     play_song();
     framenum = frameloop;
@@ -215,6 +265,6 @@ int main(int argc, char *argv[])
 
   write_ay(7, 0x3F); // Silence
   fclose(fp);
-  free(framedata);
+  free(filedata);
   return 0;
 }
