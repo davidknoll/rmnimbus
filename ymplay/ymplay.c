@@ -190,6 +190,7 @@ int main(int argc, char *argv[])
     putchar('.');
     fflush(stdout);
   }
+  fclose(fp);
   putchar('\n');
 
   // Check the file format is one that we implement
@@ -235,9 +236,12 @@ int main(int argc, char *argv[])
     offset = common_56();
     offset = common_456(offset);
 
+  } else if (!strncmp(filedata + 2, "-lh", 3)) {
+    fprintf(stderr, "This file is compressed, please decompress with LHA\n");
+    free(filedata);
+    return 1;
   } else {
     fprintf(stderr, "Invalid or unimplemented file format\n");
-    fclose(fp);
     free(filedata);
     return 1;
   }
@@ -264,7 +268,6 @@ int main(int argc, char *argv[])
   putchar('\n');
 
   write_ay(7, 0x3F); // Silence
-  fclose(fp);
   free(filedata);
   return 0;
 }
