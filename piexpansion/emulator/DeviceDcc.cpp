@@ -1,4 +1,7 @@
+#include <CircularBuffer.hpp>
+#include <WiFi.h>
 #include "DeviceDcc.h"
+#define DCC_DEBUG 0
 
 /*
  * Aux read register bits:

@@ -3,22 +3,15 @@
  */
 
 #include <ArduinoOTA.h>
-#include <CircularBuffer.hpp>
-#include <NTPClient.h>
 #include <SDFS.h>
 #include <SerialBT.h>
-#include <WiFi.h>
-#include <WiFiUdp.h>
-#include <hardware/pio.h>
 #include <hardware/rtc.h>
-#include <hardware/watchdog.h>
-#include <sys/time.h>
-#include <time.h>
 
 #include "DeviceBase.h"
-#include "DeviceDcc.h"
 #include "DeviceDsrtc.h"
-#include "DeviceParallel.h"
+#include "DeviceLogger.h"
+#include "DeviceMulti.h"
+#include "DevicePrinter.h"
 #include "arduino_secrets.h"
 #include "device.pio.h"
 
@@ -26,26 +19,12 @@
 #include <Adafruit_TinyUSB.h>
 #endif
 
-#define rol(b) ((((b) >> 7) & 0x01) | (((b) << 1) & 0xFE))
-#define ror(b) ((((b) << 7) & 0x80) | (((b) >> 1) & 0x7F))
-#define bintobcd(b) ((((b) / 10) << 4) | ((b) % 10))
-#define bcdtobin(b) ((((b) >> 4) * 10) + ((b) & 0x0F))
-
-#define TZ_OFFSET 0L
+#define TZ_POSIX "GMT0BST,M3.5.0/1,M10.5.0"
 #define SD_CS_PIN 17
 #define DEVICE_PIO pio0
 
-#define DCB_ENABLE_FLOPPY 0
-#define DCB_ENABLE_SASI   1
-
-#define PARALLEL_DEBUG 0
-#define PARALLEL_TCP_PORTA 1100
-#define PARALLEL_TCP_PORTB 1101
-#define PARALLEL_TXACK_US 100
-
-#define DCC_DEBUG 0
-
-DeviceBase *slot[4]; // Board supports slots 0-3
+// Board supports slots 0-3 but not 4 due to pin count
+DeviceBase *slot[4];
 
 void setup() {
   int i;
@@ -57,17 +36,15 @@ void setup() {
   alarm_pool_init_default();
   init_wifi();
   init_time();
-  init_rtc();
   init_ota();
   init_sd();
 
   // Card select assignments
   // slot[0] = new DeviceDcb();
-  slot[1] = new DeviceParallel();
+  slot[1] = new DevicePrinter();
   slot[2] = new DeviceDsrtc();
-  slot[3] = new DeviceDcc();
+  slot[3] = new DeviceMulti();
 
-  dcb_setup();
   for (i = 0; i < 4; i++) {
     if (slot[i]) {
       slot[i]->setup();
@@ -81,7 +58,7 @@ void loop() {
   int i;
   struct busreq req;
   ArduinoOTA.handle();
-  dcb_loop();
+
   for (i = 0; i < 4; i++) {
     if (slot[i]) {
       slot[i]->loop();
@@ -89,10 +66,26 @@ void loop() {
   }
 
   // IRQ / DMA assignments
-  // digitalWrite(nDMA, (slot[0]->dma() || slot[3]->dma()) ? LOW : HIGH);
-  // digitalWrite(nINT0, slot[0]->irq() ? LOW : HIGH);
-  digitalWrite(nINT1, slot[2]->irq() ? LOW : HIGH);
-  digitalWrite(nINT2, (slot[1]->irq() || slot[3]->irq()) ? LOW : HIGH);
+  if (slot[0] && slot[0]->dma()) {
+    digitalWrite(nDMA, LOW);
+  } else {
+    digitalWrite(nDMA, HIGH);
+  }
+  if (slot[0] && slot[0]->irq()) {
+    digitalWrite(nINT0, LOW);
+  } else {
+    digitalWrite(nINT0, HIGH);
+  }
+  if (slot[2] && slot[2]->irq()) {
+    digitalWrite(nINT1, LOW);
+  } else {
+    digitalWrite(nINT1, HIGH);
+  }
+  if (slot[1] && slot[1]->irq()) {
+    digitalWrite(nINT2, LOW);
+  } else {
+    digitalWrite(nINT2, HIGH);
+  }
 
   // Check and respond to a pending request from the Nimbus
   if (
@@ -102,19 +95,13 @@ void loop() {
     (device_program_get(DEVICE_PIO, 3, &req) != nullptr)
   ) {
     if (req.isread) {
-      switch (req.cs) {
-        case 0: req.data = dcb_read(req.address); break;
-        default: if (slot[req.cs]) {
-          req.data = slot[req.cs]->read(req.address);
-        }
+      if (slot[req.cs]) {
+        req.data = slot[req.cs]->read(req.address);
       }
       device_program_respond(DEVICE_PIO, req.cs, &req);
     } else {
-      switch (req.cs) {
-        case 0: dcb_write(req.address, req.data); break;
-        default: if (slot[req.cs]) {
-          slot[req.cs]->write(req.address, req.data);
-        }
+      if (slot[req.cs]) {
+        slot[req.cs]->write(req.address, req.data);
       }
     }
   }

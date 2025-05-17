@@ -1,4 +1,10 @@
+#include <WiFi.h>
+#include <pico/time.h>
 #include "DeviceParallel.h"
+#define PARALLEL_DEBUG 0
+#define PARALLEL_TCP_PORTA 1100
+#define PARALLEL_TCP_PORTB 1101
+#define PARALLEL_TXACK_US 100
 
 DeviceParallel::DeviceParallel(void)
   : _servera(PARALLEL_TCP_PORTA), _serverb(PARALLEL_TCP_PORTB) {}

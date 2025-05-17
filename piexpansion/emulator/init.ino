@@ -6,7 +6,7 @@ void init_wifi() {
   uint8_t mac[WL_MAC_ADDR_LENGTH];
   char hostname[20];
   WiFi.macAddress(mac);
-  sprintf(hostname, "nimbus-%02x%02x%02x", mac[3], mac[4], mac[5]);
+  snprintf(hostname, 20, "nimbus-%02x%02x%02x", mac[3], mac[4], mac[5]);
 
   WiFi.setHostname(hostname);
   WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASS);
@@ -22,33 +22,16 @@ void init_wifi() {
 }
 
 /**
- * Set the system timer to local time over WiFi using NTP
+ * Set the system timer and RTC over WiFi using NTP
  */
 void init_time() {
-  WiFiUDP ntpUDP;
-  NTPClient timeClient(ntpUDP, TZ_OFFSET);
-  timeClient.begin();
-  timeClient.update();
+  NTP.waitSet();
+  setenv("TZ", TZ_POSIX, 1);
+  tzset();
 
-  if (timeClient.isTimeSet()) {
-    struct timeval tv = { timeClient.getEpochTime(), 0 };
-    settimeofday(&tv, nullptr);
-
-    time_t now = time(nullptr);
-    Serial.print("Current time: ");
-    Serial.print(ctime(&now));
-  }
-  timeClient.end();
-}
-
-/**
- * Set the Pico's RTC based on the system timer
- */
-void init_rtc() {
-  rtc_init();
+  // Set the Pico's RTC to local time based on the system timer
   time_t now = time(nullptr);
   struct tm *ltime = localtime(&now);
-
   datetime_t dt = {
     .year  = (int16_t) (ltime->tm_year + 1900),
     .month = (int8_t)  (ltime->tm_mon  + 1),
@@ -58,7 +41,11 @@ void init_rtc() {
     .min   = (int8_t)   ltime->tm_min,
     .sec   = (int8_t)   ltime->tm_sec
   };
+  rtc_init();
   rtc_set_datetime(&dt);
+
+  Serial.print("Current time: ");
+  Serial.print(ctime(&now));
 }
 
 /**

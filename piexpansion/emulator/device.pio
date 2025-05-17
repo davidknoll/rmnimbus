@@ -2,7 +2,6 @@
 ; Side-set pins should be nWAIT only
 ; JMP pin should be the desired nCSx
 ; IN and OUT pins should both be the range covering ADx
-; Idea: Could multiple instances coexist? How to listen to multiple nCSx?
 .program device
 .side_set 1 opt
 
@@ -47,30 +46,7 @@ begin:
 .wrap
 
 % c-sdk {
-
-// Pin mappings
-#define nINT2 0
-#define nINT1 1
-#define nINT0 2
-#define nDMA 3
-#define nCS3 4
-#define nCS2 5
-#define nCS1 6
-#define nCS0 7
-#define nRESET 8
-#define nWAIT 9
-#define IORQ 10
-#define WR 11
-#define RD 12
-#define nALE 13
-#define AD7 14
-#define AD6 15
-#define AD0 20
-#define AD1 21
-#define AD2 22
-#define AD3 26
-#define AD4 27
-#define AD5 28
+#include "pinmap.h"
 
 struct busreq {
   bool isread;
@@ -164,7 +140,7 @@ struct busreq *device_program_get(PIO pio, uint sm, struct busreq *req) {
 
   if (req->isread) {
     // Don't release nWAIT yet, calling program has to respond
-    req->data = 0x00;
+    req->data = 0xFF;
   } else {
     // Capture the data being written to us, and release nWAIT to end the cycle
     req->data =

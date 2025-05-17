@@ -1,5 +1,6 @@
 #ifndef _DeviceBase_h_
 #define _DeviceBase_h_
+#include <cstdint>
 
 class DeviceBase {
   public:

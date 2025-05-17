@@ -1,3 +1,6 @@
+#define DCB_ENABLE_FLOPPY 0
+#define DCB_ENABLE_SASI   1
+
 static volatile uint8_t dcb_status  = 0x00;
 static volatile uint8_t dcb_command = 0x00;
 static volatile uint8_t dcb_track   = 0x00;

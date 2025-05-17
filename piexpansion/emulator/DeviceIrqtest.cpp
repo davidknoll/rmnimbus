@@ -1,4 +1,6 @@
+#include <Arduino.h>
 #include "DeviceIrqtest.h"
+#include "pinmap.h"
 
 /**
  * Read status of IRQ lines

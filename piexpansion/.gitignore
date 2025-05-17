@@ -3,3 +3,6 @@ gerbers
 */build
 */arduino_secrets.h
 */*.pio.h
+emulator/dos/*.com
+emulator/dos/*.lst
+emulator/dos/*.sys

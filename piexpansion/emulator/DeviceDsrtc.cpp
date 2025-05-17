@@ -1,4 +1,10 @@
+#include <SerialBT.h>
+#include <hardware/rtc.h>
 #include "DeviceDsrtc.h"
+#define rol(b) ((((b) >> 7) & 0x01) | (((b) << 1) & 0xFE))
+#define ror(b) ((((b) << 7) & 0x80) | (((b) >> 1) & 0x7F))
+#define bintobcd(b) ((((b) / 10) << 4) | ((b) % 10))
+#define bcdtobin(b) ((((b) >> 4) * 10) + ((b) & 0x0F))
 
 const uint32_t DeviceDsrtc::_rates[16] = {
   // Interrupt period to nearest whole microsecond
@@ -60,7 +66,7 @@ uint8_t DeviceDsrtc::read(uint8_t address) {
       hour = rol(_ctlc);
       _ctlc = 0x00;
       return hour;
-    case 0x0D: return rol(0x80);
+    case 0x0D: return rol((time(nullptr) >= 10000000) ? 0x80 : 0x00);
 
     // Secret Bluetooth debug port approximating an 8251
     // If card select 2 is used, data will be at 57C and status at 57E
